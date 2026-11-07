@@ -49,6 +49,12 @@ run "free -h"
 run "swapon --show"
 run "cat /proc/sys/vm/swappiness"
 
+section "3b. CONTAINER DETECTION & REAL LIMITS (cgroup)"
+run "systemd-detect-virt --container 2>/dev/null || true; [ -f /.dockerenv ] && echo 'marker: /.dockerenv'; [ -f /run/.containerenv ] && echo 'marker: /run/.containerenv'"
+run "head -n 5 /proc/1/cgroup; cat /proc/1/comm"
+run "for f in memory.max memory.current memory.swap.max memory.swap.current cpu.max pids.max; do [ -r /sys/fs/cgroup/\$f ] && echo \"\$f = \$(cat /sys/fs/cgroup/\$f)\"; done"
+run "cat /sys/fs/cgroup/memory/memory.limit_in_bytes /sys/fs/cgroup/cpu/cpu.cfs_quota_us 2>/dev/null"
+
 section "4. STORAGE"
 run "df -hT -x tmpfs -x devtmpfs -x overlay -x squashfs"
 run "df -i / | tail -n 1"
