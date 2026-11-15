@@ -9,25 +9,19 @@ France 24 Afrique|fr|africa|media|https://www.france24.com/fr/afrique/rss
 France 24 AR|ar|global|media|https://www.france24.com/ar/rss
 RFI Afrique|fr|africa|media|https://www.rfi.fr/fr/afrique/rss
 Le Monde International|fr|global|media|https://www.lemonde.fr/international/rss_full.xml
-Hespress FR|fr|maghreb|media|https://fr.hespress.com/feed
-Hespress EN|en|maghreb|media|https://en.hespress.com/feed
-Le360|fr|maghreb|media|https://fr.le360.ma/rss
+Le360|fr|maghreb|media|https://fr.le360.ma/arc/outboundfeeds/rss/?outputType=xml
 TSA Algerie|fr|maghreb|media|https://www.tsa-algerie.com/feed/
 The National UAE|en|gulf|media|https://www.thenationalnews.com/arc/outboundfeeds/rss/?outputType=xml
-Arab News|en|gulf|media|https://www.arabnews.com/rss.xml
 Guardian World|en|global|media|https://www.theguardian.com/world/rss
 NPR World|en|usa|media|https://feeds.npr.org/1004/rss.xml
 Deutsche Welle EN|en|europe|media|https://rss.dw.com/rdf/rss-en-world
 Euronews FR|fr|europe|media|https://fr.euronews.com/rss
 UN News|en|global|official|https://news.un.org/feed/subscribe/en/news/all/rss.xml
 UN News AR|ar|global|official|https://news.un.org/feed/subscribe/ar/news/all/rss.xml
-US State Dept|en|usa|official|https://www.state.gov/rss-feed/press-releases/feed/
 US DoD News|en|usa|official|https://www.defense.gov/DesktopModules/ArticleCS/RSS.ashx?ContentType=1&Site=945&max=10
-NATO News|en|europe|official|https://www.nato.int/cps/rss/en/natohq/rssFeed.xsl/rssFeed.xml
 OilPrice|en|economy|media|https://oilprice.com/rss/main
 EIA Today in Energy|en|economy|official|https://www.eia.gov/rss/todayinenergy.xml
 Crisis Group|en|global|think-tank|https://www.crisisgroup.org/rss.xml
-ReliefWeb Updates|en|global|think-tank|https://reliefweb.int/updates/rss.xml
 BBC Arabic|ar|mena|media|https://feeds.bbci.co.uk/arabic/rss.xml
 Medias24|fr|maghreb|media|https://medias24.com/feed/
 TelQuel|fr|maghreb|media|https://telquel.ma/feed

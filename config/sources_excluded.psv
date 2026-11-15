@@ -1,0 +1,7 @@
+name|lang|region|type|url|reason|checked_at
+Hespress FR|fr|maghreb|media|https://fr.hespress.com/feed|403 anti-bot (meme avec UA navigateur) - pas de contournement (regle OSINT 11)|2026-11-15
+Hespress EN|en|maghreb|media|https://en.hespress.com/feed|403 anti-bot (meme avec UA navigateur) - pas de contournement (regle OSINT 11)|2026-11-15
+Arab News|en|gulf|media|https://www.arabnews.com/rss.xml|403 anti-bot (meme avec UA navigateur) - pas de contournement (regle OSINT 11)|2026-11-15
+US State Dept|en|usa|official|https://www.state.gov/rss-feed/press-releases/feed/|403 sur UA identifie; accessible seulement en se faisant passer pour un navigateur - refuse|2026-11-15
+NATO News|en|europe|official|https://www.nato.int/cps/rss/en/natohq/rssFeed.xsl/rssFeed.xml|404 sur 5 variantes d'URL - flux supprime|2026-11-15
+ReliefWeb Updates|en|global|think-tank|https://reliefweb.int/updates/rss.xml|202 challenge Cloudflare; ancienne API 410 - voir API v2 officielle plus tard|2026-11-15
