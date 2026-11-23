@@ -14,6 +14,7 @@ Outil de collecte et d'organisation de notes, idées, articles, citations, tâch
 - **Demander à l'herbier** : questions en langage naturel ; Claude cherche dans les fiches (recherche plein texte et lecture complète), répond en citant les numéros (N°012 ouvre la fiche) ; réponse enregistrable dans Synthèses.
 - **Cycle des idées** : chaque fiche a un stade (Graine, Pousse, Fleur, Fanée) ; tableau en colonnes avec flèches pour faire avancer les idées ; stade modifiable dans la fiche ; périmètre « Stade » dans les synthèses.
 - **Fiche du jour** : une graine ou une pousse ressort chaque jour en tête des fiches (faire pousser, laisser faner, demander comment la développer, en voir une autre).
+- **Mémo vocal** : bouton qui ouvre l'enregistreur du téléphone (ou un fichier audio : .m4a, .ogg, .webm…). Le son est rangé dans une fiche « Mémos vocaux » qu'on peut réécouter ; une zone « Ce que dit le mémo » permet de noter ou dicter l'essentiel, puis de le faire analyser par Claude. Pas de transcription automatique : Claude ne lit pas l'audio depuis la page.
 - **Dictée** : bouton « Dicter » dans la zone de collecte et dans « Demander » (navigateurs Chromium et app de bureau Claude).
 - **Fiches liées** : dans chaque fiche, jusqu'à 5 fiches proches (sujets, mots-clés, catégorie et titre en commun).
 - **Doublons** : dans la boîte de réception, un repère « proche de N°… » signale un élément qui ressemble à une fiche existante.

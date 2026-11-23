@@ -193,13 +193,15 @@ main { display: flex; flex-direction: column; gap: 20px; min-width: 0 }
       <textarea id="capText" placeholder="Collez une note, une idée, une citation, le texte d'un article, un lien… ou déposez / collez une image ici."></textarea>
       <div class="cap-row">
         <input type="url" id="capUrl" placeholder="Source (lien), facultatif">
-        <input type="file" id="capFile" accept="image/*,.txt,.md,.markdown,.csv,.json,.xml,.rss,.atom,text/plain" multiple hidden>
+        <input type="file" id="capFile" accept="image/*,audio/*,.m4a,.ogg,.opus,.txt,.md,.markdown,.csv,.json,.xml,.rss,.atom,text/plain" multiple hidden>
+        <input type="file" id="capAudio" accept="audio/*" capture hidden>
         <input type="file" id="capGallery" accept="image/*" multiple hidden>
         <input type="file" id="capCamera" accept="image/*" capture="environment" hidden>
       </div>
       <div class="cap-row">
         <button class="btn" id="capGal" type="button">Galerie photos</button>
         <button class="btn" id="capCam" type="button">Appareil photo</button>
+        <button class="btn" id="capVoice" type="button">Mémo vocal</button>
         <button class="btn" id="capPick" type="button">Fichiers</button>
         <button class="btn" id="capMic" type="button" data-mic="capText" hidden>Dicter</button>
         <button class="btn" id="capBulk" type="button">Import en lot</button>
@@ -259,7 +261,7 @@ const STAGES = [
 ];
 const stageOf = (it) => STAGES.find((s) => s.k === it.stage) || STAGES[0];
 const stageChip = (it) => { const s = stageOf(it); return `<span class="stage" style="--h:${s.h}" title="${esc(s.d)}">${s.label}</span>`; };
-const S = { items: [], inbox: [], synths: [], ask: { turns: [], running: false, ctl: null, live: "", draft: "", note: "" }, canTools: false, dayOffset: 0, filter: { cat: null, type: null, topic: null, src: null, q: "" }, tab: "sheets",
+const S = { items: [], inbox: [], synths: [], chunks: new Map(), assets: null, ask: { turns: [], running: false, ctl: null, live: "", draft: "", note: "" }, canTools: false, dayOffset: 0, filter: { cat: null, type: null, topic: null, src: null, q: "" }, tab: "sheets",
   imp: null, batch: { running: false, stop: false, note: "" }, mcp: null, conn: null,
   col: null, local: false, sample: null, canImg: false, downloads: null, open: null, pendingFile: null,
   studio: { scope: "all", mode: "synthese", extra: "", running: false, text: "", ctl: null, scopeLabel: "" },
@@ -289,6 +291,7 @@ const LS_KEY = "herbier-local-v1";
 function localLoad() { try { const d = JSON.parse(localStorage.getItem(LS_KEY) || "[]"); return Array.isArray(d) ? d : []; } catch { return []; } }
 function localSave() { try { localStorage.setItem(LS_KEY, JSON.stringify([...S.items, ...S.inbox, ...S.synths])); } catch { toast("Stockage local indisponible : les données seront perdues à la fermeture."); } }
 function ingest(docs) {
+  S.chunks = new Map(); for (const d of docs) if (d.kind === "audiochunk") { if (!S.chunks.has(d.owner)) S.chunks.set(d.owner, []); S.chunks.get(d.owner).push(d); }
   const all = docs.filter((d) => d.kind === "item").sort((a, b) => b.createdAt - a.createdAt);
   S.items = all.filter((d) => !d.inbox); S.inbox = all.filter((d) => d.inbox);
   S.synths = docs.filter((d) => d.kind === "synth").sort((a, b) => b.createdAt - a.createdAt);
@@ -302,6 +305,11 @@ async function patch(id, data) {
   else { const it = [...S.items, ...S.inbox, ...S.synths].find((x) => x.id === id); if (it) Object.assign(it, data); ingest([...S.items, ...S.inbox, ...S.synths]); localSave(); render(); }
 }
 async function remove(id) {
+  const it = [...S.items, ...S.inbox].find((x) => x.id === id);
+  if (it && it.audio) {
+    if (it.audio.asset && S.assets) S.assets.delete(it.audio.asset).catch(() => {});
+    if (it.audio.chunks && S.col) for (let i = 0; i < it.audio.chunks; i++) await S.col.doc(`a-${id}-${i}`).delete().catch(() => {});
+  }
   if (S.col) { try { await S.col.doc(id).delete(); } catch (e) { toast("Suppression impossible (" + e.code + ")."); } }
   else { S.items = S.items.filter((x) => x.id !== id); S.inbox = S.inbox.filter((x) => x.id !== id); S.synths = S.synths.filter((x) => x.id !== id); localSave(); render(); }
 }
@@ -356,6 +364,7 @@ const isStructured = (f) => /\.(json|xml|rss|atom)$/i.test(f.name || "") || /jso
 async function acceptFiles(list) {
   const files = [...(list || [])]; if (!files.length) return;
   if (files.length === 1 && isImg(files[0])) return setAttach(files[0]);
+  if (files.length === 1 && isAudio(files[0])) return addVoiceMemo(files[0]);
   if (files.length === 1 && !isStructured(files[0])) {
     const file = files[0]; if (file.size > 2e6) return toast("Fichier texte trop volumineux (2 Mo max).");
     const txt = await file.text(); const ta = $("capText");
@@ -389,6 +398,7 @@ function parseFeed(xml, fallbackName) {
 }
 async function parseFile(f) {
   if (isImg(f)) return [{ file: f, title: f.name, text: "", type: "image" }];
+  if (isAudio(f)) return [{ file: f, title: memoTitle(f), text: "", type: "note", source: "Mémo vocal" }];
   if (f.size > 15e6) throw new Error("size");
   const txt = await f.text();
   if (/\.json$/i.test(f.name) || /^\s*[\[{]/.test(txt) && /json/.test(f.type)) {
@@ -565,8 +575,66 @@ async function addFromCapture() {
   try { await addItem({ text, url, file }); $("capText").value = ""; $("capUrl").value = ""; setAttach(null); }
   catch {} finally { $("capAdd").disabled = false; }
 }
+/* ---------- Voice memos ---------- */
+const isAudio = (f) => (f.type || "").startsWith("audio/") || /\.(m4a|aac|mp3|wav|ogg|opus|amr|3gp|weba)$/i.test(f.name || "");
+const fmtDur = (s) => { s = Math.round(s || 0); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
+function memoTitle(f) {
+  const d = new Date(f && f.lastModified ? f.lastModified : Date.now());
+  return "Mémo vocal du " + fmtDate(d) + " à " + d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+}
+function durationOf(file) {
+  return new Promise((res) => {
+    let u; try { u = URL.createObjectURL(file); } catch { return res(0); }
+    const a = new Audio(); const done = (v) => { try { URL.revokeObjectURL(u); } catch {} res(v); };
+    a.preload = "metadata"; a.onloadedmetadata = () => done(isFinite(a.duration) ? a.duration : 0); a.onerror = () => done(0);
+    setTimeout(() => done(0), 4000); a.src = u;
+  });
+}
+async function storeAudio(file, itemId) {
+  const ext = ((file.name || "").match(/\.(\w+)$/) || [])[1]?.toLowerCase() || "";
+  // Audio-only MP4/WebM/Ogg recordings are valid video/* containers, which the asset store accepts.
+  const asType = { m4a: "video/mp4", mp4: "video/mp4", webm: "video/webm", weba: "video/webm", ogg: "video/ogg", opus: "video/ogg", "3gp": "video/3gpp" }[ext]
+    || { "audio/mp4": "video/mp4", "audio/x-m4a": "video/mp4", "audio/m4a": "video/mp4", "audio/webm": "video/webm", "audio/ogg": "video/ogg", "audio/3gpp": "video/3gpp" }[file.type];
+  const meta = { name: file.name || "", mime: file.type || "", size: file.size, duration: await durationOf(file) };
+  if (S.assets && asType && file.size <= 20 * 1048576) {
+    try { const r = await S.assets.upload(file, { type: asType }); return { ...meta, asset: r.id }; } catch (e) { if (e && e.code === "quota_exceeded") throw new Error("Espace de stockage des fichiers plein."); }
+  }
+  if (file.size > 900000) throw new Error("Ce format de mémo n'est accepté que jusqu'à 900 Ko. Enregistrez en .m4a ou faites un mémo plus court.");
+  const data = await readAsDataURL(file);
+  if (!S.col) return { ...meta, data };
+  const parts = []; for (let i = 0; i < data.length; i += 200000) parts.push(data.slice(i, i + 200000));
+  for (let i = 0; i < parts.length; i++) await S.col.doc(`a-${itemId}-${i}`).set({ kind: "audiochunk", owner: itemId, i, n: parts.length, data: parts[i] });
+  return { ...meta, chunks: parts.length };
+}
+const AUDIO_URLS = new Map();
+function audioSrc(it) {
+  const a = it.audio; if (!a) return "";
+  if (a.asset) return "/_blob/" + a.asset;
+  if (a.data) return a.data;
+  const parts = (S.chunks.get(it.id) || []).slice().sort((x, y) => x.i - y.i);
+  if (parts.length < (a.chunks || 1)) return "";
+  if (AUDIO_URLS.has(it.id)) return AUDIO_URLS.get(it.id);
+  try {
+    const data = parts.map((p) => p.data).join(""); const [head, b64] = data.split(","); const bin = atob(b64); const u8 = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    const url = URL.createObjectURL(new Blob([u8], { type: (head.match(/data:([^;]+)/) || [])[1] || "audio/mp4" })); AUDIO_URLS.set(it.id, url); return url;
+  } catch { return ""; }
+}
+async function addVoiceMemo(file) {
+  toast("Enregistrement du mémo vocal…");
+  try { await addItem({ file, title: memoTitle(file), type: "note", source: "Mémo vocal" }); toast("Mémo vocal ajouté. Ouvrez la fiche pour l'écouter et noter ce qu'il dit."); }
+  catch (e) { toast(e && e.message ? e.message : "Le mémo n'a pas pu être enregistré."); }
+}
+
 async function addItem({ text, url, file, example, type, title, source, published, lang, queue }) {
   const id = "i-" + rid();
+  if (file && isAudio(file)) {
+    const audio = await storeAudio(file, id);
+    const memo = { id, kind: "item", type: "note", title: clip(title || memoTitle(file), 120), text: "", url: "", image: null, audio,
+      category: "Mémos vocaux", topics: [], keywords: [], summary: "Mémo vocal de " + fmtDur(audio.duration) + ". Ajoutez ce qu'il dit pour que Claude l'analyse.", actions: [], extracted: "",
+      source: source || "Mémo vocal", published: "", lang: "", status: "done", stage: "graine", example: false, createdAt: Date.now() + Math.random() };
+    await put(memo); return memo;
+  }
   let image = null; if (file && file.type.startsWith("image/")) { try { image = await thumb(file); } catch { toast("Image illisible."); } }
   const item = { id, kind: "item", type: TYPES.includes(type) ? type : guessType(text, url, !!image),
     title: clip(title || "", 120) || firstLine(text) || (url ? url.replace(/^https?:\/\/(www\.)?/, "").slice(0, 70) : (file ? file.name : "Image du " + fmtDate(Date.now()))),
@@ -765,6 +833,7 @@ function sheetHTML(it) {
   return `<button class="sheet" data-open="${it.id}">
     <div class="top"><span class="num">N°${numOf(it)}</span><span class="type">${esc(it.type)}</span>${stageChip(it)}${it.example ? '<span class="chip">exemple</span>' : ""}${st}</div>
     ${it.image ? `<img class="thumb" src="${it.image}" alt="">` : ""}
+    ${it.audio ? `<span class="chip" style="align-self:flex-start;border-color:var(--accent);color:var(--accent)">Mémo vocal · ${fmtDur(it.audio.duration)}</span>` : ""}
     <h4>${esc(it.title)}</h4>
     ${it.summary || it.text ? `<p>${esc(it.summary || it.text)}</p>` : ""}
     <div class="tags">${(it.topics || []).slice(0, 4).map((t) => `<span class="chip">${esc(t)}</span>`).join("")}</div>
@@ -836,7 +905,11 @@ function renderStudio(v) {
 }
 function renderDrawer() {
   const root = $("drawerRoot"); const it = S.items.find((x) => x.id === S.open);
-  if (!it) { root.innerHTML = ""; return; }
+  if (!it) { root.innerHTML = ""; S.drawerFor = null; return; }
+  const prevNotes = $("dNotes"); const keep = prevNotes && S.drawerFor === it.id ? { v: prevNotes.value, f: document.activeElement === prevNotes, p: prevNotes.selectionStart } : null;
+  const au0 = $("dAudio");
+  if (au0 && S.drawerFor === it.id && au0.src && !au0.paused) return; // do not cut a memo that is playing
+  S.drawerFor = it.id;
   const cats = categories().map(([c]) => c);
   root.innerHTML = `<div class="scrim" id="scrim"></div><aside class="drawer" role="dialog" aria-label="Fiche">
     <div class="cap-row"><span class="num mono" style="color:var(--mark);font-weight:600">N°${numOf(it)}</span><span class="muted mono" style="font-size:12px">${fmtDate(it.createdAt)}</span><button class="btn sm close" id="dClose" type="button">Fermer</button></div>
@@ -848,6 +921,9 @@ function renderDrawer() {
       <div class="field"><label for="dCat">Catégorie</label><input id="dCat" list="dCats" value="${esc(it.category || "Non classé")}"><datalist id="dCats">${cats.map((c) => `<option value="${esc(c)}">`).join("")}</datalist></div>
     </div>
     ${it.image ? `<img class="full" src="${it.image}" alt="">` : ""}
+    ${it.audio ? `<div class="field"><label for="dAudio">Mémo vocal · ${fmtDur(it.audio.duration)}</label><audio id="dAudio" controls preload="metadata" style="width:100%"></audio>
+      <label for="dNotes" style="margin-top:8px">Ce que dit le mémo</label><textarea id="dNotes" rows="4" placeholder="Écoutez le mémo et notez l'essentiel, ou dictez-le avec le micro du clavier.">${esc(it.text)}</textarea>
+      <div class="cap-row"><button class="btn primary sm" id="dNotesSave" type="button">${S.sample ? "Enregistrer et analyser" : "Enregistrer"}</button></div></div>` : ""}
     ${it.url || it.source ? `<div><span class="type">Source</span><br>${it.source ? `<b>${esc(it.source)}</b>${it.published ? " · " + esc(fmtDate(it.published)) : ""}<br>` : ""}${it.url ? `<a href="${esc(it.url)}" target="_blank" rel="noopener">${esc(it.url)}</a>` : ""}</div>` : ""}
     ${it.summary ? `<div><span class="type">Résumé</span><p style="margin:4px 0 0">${esc(it.summary)}</p></div>` : ""}
     ${(it.topics || []).length ? `<div class="cloud">${it.topics.map((t) => `<span class="chip">${esc(t)}</span>`).join("")}${(it.keywords || []).filter((k) => !it.topics.includes(k)).map((k) => `<span class="chip" style="border-style:dashed">${esc(k)}</span>`).join("")}</div>` : ""}
@@ -868,6 +944,16 @@ function renderDrawer() {
   $("dCat").onchange = (e) => { const v = e.target.value.trim(); if (v) patch(it.id, { category: clip(v, 40) }); };
   $("dRe").onclick = () => { patch(it.id, { status: "pending" }); analyze(it, null); close(); };
   $("dSyn").onclick = () => { S.studio.scope = "cat::" + (it.category || "Non classé"); S.tab = "studio"; close(); render(); };
+  if (it.audio) {
+    const src = audioSrc(it); const au = $("dAudio");
+    if (keep) { const n = $("dNotes"); n.value = keep.v; if (keep.f) { n.focus(); n.setSelectionRange(keep.p, keep.p); } }
+    if (src) au.src = src; else au.insertAdjacentHTML("afterend", '<span class="muted" style="font-size:13px">Chargement du son…</span>');
+    $("dNotesSave").onclick = async () => {
+      const t = $("dNotes").value.trim(); if (!t) { toast("Écrivez d'abord ce que dit le mémo."); return; }
+      await patch(it.id, { text: t, summary: "" });
+      if (S.sample) { await patch(it.id, { status: "pending" }); analyze({ ...it, text: t, title: firstLine(t) || it.title }, null); toast("Analyse du mémo en cours."); } else toast("Notes enregistrées.");
+    };
+  }
   const del = $("dDel"); del.onclick = () => { if (del.dataset.armed) { remove(it.id); close(); } else { del.dataset.armed = 1; del.textContent = "Confirmer la suppression"; } };
   $("dClose").focus();
 }
@@ -1117,6 +1203,8 @@ $("capGal").onclick = () => $("capGallery").click();
 $("capCam").onclick = () => $("capCamera").click();
 $("capGallery").onchange = (e) => { acceptFiles(e.target.files); e.target.value = ""; };
 $("capCamera").onchange = (e) => { acceptFiles(e.target.files); e.target.value = ""; };
+$("capVoice").onclick = () => $("capAudio").click();
+$("capAudio").onchange = (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) addVoiceMemo(f); };
 $("capConn").onclick = () => { if (S.imp && S.imp.busy) return; S.imp = null; renderImport(); S.conn = S.conn || { src: "drive", q: "", busy: false, err: "" }; S.conn.open = true; renderConn(); $("connPanel").scrollIntoView({ behavior: "smooth", block: "start" }); };
 $("runQueue").onclick = () => { if (S.batch.running) { S.batch.stop = true; $("runQueue").textContent = "Arrêt après ce lot…"; } else analyzeQueue(); };
 $("capText").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); addFromCapture(); } });
@@ -1139,7 +1227,8 @@ function goLocal(note) { S.local = true; S.col = null; ingest(localLoad()); S.lo
 render();
 (async () => {
   const use = (n) => (window.claude && window.claude.use ? window.claude.use(n).catch(() => null) : Promise.resolve(null));
-  const [db, user, sample, downloads, mcp, dictation] = await Promise.all([use("db"), use("user"), use("sample"), use("downloads"), use("mcp"), use("dictation")]);
+  const [db, user, sample, downloads, mcp, dictation, assets] = await Promise.all([use("db"), use("user"), use("sample"), use("downloads"), use("mcp"), use("dictation"), use("assets")]);
+  S.assets = assets;
   initDictation(dictation);
   S.sample = sample; S.downloads = downloads; S.mcp = mcp; if (S.conn && S.conn.open) renderConn();
   if (sample) { try { const lim = await sample.limits(); S.canImg = !!lim.images; S.canTools = !!lim.tools; } catch { S.canImg = false; S.canTools = false; } }
