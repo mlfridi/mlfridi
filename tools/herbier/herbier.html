@@ -201,6 +201,7 @@ main { display: flex; flex-direction: column; gap: 20px; min-width: 0 }
         <button class="btn" id="capGal" type="button">Galerie photos</button>
         <button class="btn" id="capCam" type="button">Appareil photo</button>
         <button class="btn" id="capPick" type="button">Fichiers</button>
+        <button class="btn" id="capMic" type="button" data-mic="capText" hidden>Dicter</button>
         <button class="btn" id="capBulk" type="button">Import en lot</button>
         <button class="btn" id="capConn" type="button">Drive, Gmail, Notion</button>
         <button class="btn primary" id="capAdd" type="button">Ajouter à l'herbier</button>
@@ -851,6 +852,7 @@ function renderDrawer() {
     ${it.summary ? `<div><span class="type">Résumé</span><p style="margin:4px 0 0">${esc(it.summary)}</p></div>` : ""}
     ${(it.topics || []).length ? `<div class="cloud">${it.topics.map((t) => `<span class="chip">${esc(t)}</span>`).join("")}${(it.keywords || []).filter((k) => !it.topics.includes(k)).map((k) => `<span class="chip" style="border-style:dashed">${esc(k)}</span>`).join("")}</div>` : ""}
     ${(it.actions || []).length ? `<div><span class="type">Suggestions</span><ul style="margin:4px 0 0;padding-left:1.2em">${it.actions.map((a) => `<li>${esc(a)}</li>`).join("")}</ul></div>` : ""}
+    ${relatedHTML(it)}
     ${it.extracted ? `<div><span class="type">Lu dans l'image</span><div class="body">${esc(it.extracted)}</div></div>` : ""}
     ${it.text ? `<div><span class="type">Contenu</span><div class="body">${esc(it.text)}</div></div>` : ""}
     <div class="cap-row">
@@ -859,6 +861,7 @@ function renderDrawer() {
       <button class="btn danger" id="dDel" type="button" style="margin-left:auto">Supprimer</button>
     </div></aside>`;
   const close = () => { S.open = null; renderDrawer(); };
+  root.querySelectorAll("[data-rel]").forEach((b) => (b.onclick = () => { S.open = b.dataset.rel; renderDrawer(); }));
   $("scrim").onclick = close; $("dClose").onclick = close;
   $("dType").onchange = (e) => patch(it.id, { type: e.target.value });
   $("drawerRoot").querySelectorAll("[data-stage]").forEach((b) => (b.onclick = () => setStage(it.id, b.dataset.stage)));
@@ -875,7 +878,7 @@ function inboxHTML() {
   return `<section class="studio" aria-label="Boîte de réception"><div class="cap-row"><h3 style="font-size:17px">Boîte de réception</h3><span class="muted" style="font-size:13px"><b class="mono">${S.inbox.length}</b> nouveauté(s) de la collecte automatique, déjà classée(s) par Claude</span>
       <span style="margin-left:auto;display:flex;gap:6px"><button class="btn sm primary" id="inKeepAll" type="button">Tout garder</button><button class="btn sm danger" id="inDropAll" type="button">Tout jeter</button></span></div>
     <div class="imp-list" style="max-height:none">${list.map((it) => `<div class="imp-row" style="grid-template-columns:minmax(0,1fr) auto"><span>
-      <span class="t">${esc(it.title)}</span><br><span class="s">${esc([it.source, it.published && fmtDate(it.published)].filter(Boolean).join(" · "))}</span>
+      <span class="t">${esc(it.title)}</span>${(() => { const d = nearDup(it); return d ? ` <span class="chip" title="${esc(d.title)}" style="border-color:var(--mark);color:var(--mark)">proche de N°${numOf(d)}</span>` : ""; })()}<br><span class="s">${esc([it.source, it.published && fmtDate(it.published)].filter(Boolean).join(" · "))}</span>
       ${it.summary ? `<br><span style="font-size:13px">${esc(clip(it.summary, 220))}</span>` : ""}
       <br><span class="chip cat" style="--h:${hue(it.category || "Non classé")};margin-top:4px">${esc(it.category || "Non classé")}</span> ${it.url ? `<a href="${esc(it.url)}" target="_blank" rel="noopener" style="color:var(--accent);font-size:12.5px">Lire la source</a>` : ""}</span>
       <span style="display:flex;flex-direction:column;gap:6px"><button class="btn sm primary" type="button" data-keep="${it.id}">Garder</button><button class="btn sm" type="button" data-drop="${it.id}">Jeter</button></span></div>`).join("")}</div>
@@ -888,6 +891,65 @@ function wireInbox(v) {
   if (ka) ka.onclick = async () => { ka.disabled = true; const ids = S.inbox.slice(0, 40).map((i) => i.id); for (const id of ids) await patch(id, { inbox: false, keptAt: Date.now() }); toast(ids.length + " fiche(s) gardée(s)."); };
   if (da) da.onclick = async () => { if (!da.dataset.armed) { da.dataset.armed = 1; da.textContent = "Confirmer ?"; return; } da.disabled = true; const ids = S.inbox.slice(0, 40).map((i) => i.id); for (const id of ids) await remove(id); toast(ids.length + " fiche(s) jetée(s)."); };
 }
+
+/* ---------- Related fiches & near-duplicates ---------- */
+const words = (s) => new Set((String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").match(/[\p{L}\p{N}]{4,}/gu) || []).filter((w) => !STOP.has(w)));
+function jaccard(a, b) { if (!a.size || !b.size) return 0; let n = 0; for (const w of a) if (b.has(w)) n++; return n / (a.size + b.size - n); }
+function related(it, n = 5) {
+  const tp = new Set((it.topics || []).map((t) => t.toLowerCase())), kw = new Set((it.keywords || []).map((t) => t.toLowerCase())), tw = words(it.title);
+  return S.items.filter((x) => x.id !== it.id).map((x) => {
+    let s = 0;
+    for (const t of x.topics || []) if (tp.has(t.toLowerCase())) s += 3;
+    for (const k of x.keywords || []) if (kw.has(k.toLowerCase())) s += 1;
+    if ((x.category || "") === (it.category || "") && it.category) s += 1;
+    s += Math.round(jaccard(tw, words(x.title)) * 6);
+    return [s, x];
+  }).filter(([s]) => s >= 3).sort((a, b) => b[0] - a[0]).slice(0, n).map(([, x]) => x);
+}
+function relatedHTML(it) {
+  const r = related(it); if (!r.length) return "";
+  return `<div><span class="type">Fiches liées</span><div style="display:flex;flex-direction:column;gap:4px;margin-top:4px">${r.map((x) => `<button class="taxon" type="button" data-rel="${x.id}" style="--h:${hue(x.category || "Non classé")}"><span class="num mono" style="color:var(--mark);font-size:11px;font-weight:600">N°${numOf(x)}</span><span class="lbl">${esc(x.title)}</span>${stageChip(x)}</button>`).join("")}</div></div>`;
+}
+function nearDup(it) {
+  const tw = words(it.title + " " + (it.summary || ""));
+  let best = null, bs = 0;
+  for (const x of S.items) { if (it.url && x.url === it.url) return x; const s = jaccard(tw, words(x.title + " " + (x.summary || ""))); if (s > bs) { bs = s; best = x; } }
+  return bs >= 0.35 ? best : null;
+}
+
+/* ---------- Voice dictation ---------- */
+const DICT = { d: null, target: null, off: false };
+function micsRender() {
+  const on = !!DICT.d && !DICT.off; const active = on && DICT.d.active();
+  document.querySelectorAll("[data-mic]").forEach((b) => { b.hidden = !on; b.textContent = active && DICT.target === b.dataset.mic ? "Arrêter la dictée" : "Dicter"; b.classList.toggle("primary", active && DICT.target === b.dataset.mic); });
+}
+function micClick(targetId) {
+  const d = DICT.d; if (!d) return;
+  if (d.active()) { d.stop().catch(() => {}); return; }
+  DICT.target = targetId;
+  d.start().catch((e) => {
+    if (e.code === "not_granted" || e.code === "unavailable") { DICT.off = true; micsRender(); toast(e.code === "not_granted" ? "Micro refusé : la dictée est désactivée pour cette page." : "La dictée n'est pas disponible ici."); }
+    else if (e.code === "rate_limited") toast("Le micro est déjà utilisé. Réessayez dans un instant.");
+    else if (e.code !== "stopped" && e.code !== "dismissed") toast("La dictée a échoué (" + e.code + ").");
+  });
+  micsRender();
+}
+function initDictation(d) {
+  if (!d) return; DICT.d = d;
+  d.onPartial(({ text }) => { const t = $("toast"); t.textContent = "Écoute : " + text; t.hidden = false; clearTimeout(toast.t); });
+  d.onFinal(({ text }) => {
+    const el = $(DICT.target); if (!el || !text) return;
+    el.value = (el.value && !/\s$/.test(el.value) ? el.value + " " : el.value) + text.trim();
+    if (DICT.target === "askQ") S.ask.draft = el.value;
+    $("toast").hidden = true;
+  });
+  d.onState(({ state, reason }) => {
+    if (state === "idle") { $("toast").hidden = true; if (reason === "not_granted" || reason === "unavailable") DICT.off = true; if (reason === "rate_limited") toast("Le micro est déjà utilisé. Réessayez dans un instant."); if (reason === "upstream_error") toast("Le micro ou la reconnaissance vocale a échoué."); }
+    micsRender();
+  });
+  micsRender();
+}
+document.addEventListener("click", (e) => { const b = e.target.closest && e.target.closest("[data-mic]"); if (b) micClick(b.dataset.mic); });
 
 /* ---------- Idea life cycle ---------- */
 async function setStage(id, k) {
@@ -1009,13 +1071,14 @@ function renderAsk(v) {
     <div class="chat">${msgs}${A.running ? `<div class="msg bot prose" id="askLive">${A.live ? linkRefs(md(A.live)) : '<span class="state" style="margin:0"><span class="pulse"></span>Claude cherche dans vos fiches…</span>'}</div>` : ""}</div>
     ${A.note ? `<div class="banner">${esc(A.note)}</div>` : ""}
     <div class="ask-box"><textarea id="askQ" placeholder="${S.sample ? "Votre question… (Entrée pour envoyer, Maj + Entrée pour aller à la ligne)" : "Disponible lorsque cette page peut utiliser Claude."}"${S.sample ? "" : " disabled"}>${esc(A.draft)}</textarea>
-      <div class="cap-row">${A.running ? '<button class="btn" id="askStop" type="button">Arrêter</button>' : `<button class="btn primary" id="askGo" type="button"${S.sample ? "" : " disabled"}>Envoyer</button>`}
+      <div class="cap-row">${A.running ? '<button class="btn" id="askStop" type="button">Arrêter</button>' : `<button class="btn primary" id="askGo" type="button"${S.sample ? "" : " disabled"}>Envoyer</button>`}<button class="btn" type="button" data-mic="askQ" hidden>Dicter</button>
         ${A.turns.length && !A.running ? '<button class="btn" id="askClear" type="button">Nouvelle conversation</button><button class="btn" id="askSave" type="button">Enregistrer la dernière réponse</button>' : ""}</div></div></div>`;
   wireRefs(v);
   v.querySelectorAll("[data-sug]").forEach((b) => (b.onclick = () => askSend(ASK_SUGGEST[+b.dataset.sug])));
   const q = $("askQ"); q.oninput = () => (A.draft = q.value);
   q.onkeydown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); askSend(q.value); } };
   const on = (id, fn) => { const el = $(id); if (el) el.onclick = fn; };
+  micsRender();
   on("askGo", () => askSend(q.value)); on("askStop", () => A.ctl?.abort());
   on("askClear", () => { A.turns = []; A.note = ""; render(); });
   on("askSave", async () => { const last = [...A.turns].reverse().find((t) => t.role === "assistant"); const qq = [...A.turns].reverse().find((t) => t.role === "user");
@@ -1070,7 +1133,8 @@ function goLocal(note) { S.local = true; S.col = null; ingest(localLoad()); S.lo
 render();
 (async () => {
   const use = (n) => (window.claude && window.claude.use ? window.claude.use(n).catch(() => null) : Promise.resolve(null));
-  const [db, user, sample, downloads, mcp] = await Promise.all([use("db"), use("user"), use("sample"), use("downloads"), use("mcp")]);
+  const [db, user, sample, downloads, mcp, dictation] = await Promise.all([use("db"), use("user"), use("sample"), use("downloads"), use("mcp"), use("dictation")]);
+  initDictation(dictation);
   S.sample = sample; S.downloads = downloads; S.mcp = mcp; if (S.conn && S.conn.open) renderConn();
   if (sample) { try { const lim = await sample.limits(); S.canImg = !!lim.images; S.canTools = !!lim.tools; } catch { S.canImg = false; S.canTools = false; } }
   let uid = null; if (user) { try { uid = await user.id(); } catch {} }
