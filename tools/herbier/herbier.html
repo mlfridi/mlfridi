@@ -162,8 +162,15 @@ main { display: flex; flex-direction: column; gap: 20px; min-width: 0 }
       <div class="cap-row">
         <input type="url" id="capUrl" placeholder="Source (lien), facultatif">
         <input type="file" id="capFile" accept="image/*,.txt,.md,.markdown,.csv,.json,.xml,.rss,.atom,text/plain" multiple hidden>
-        <button class="btn" id="capPick" type="button">Images ou fichiers</button>
+        <input type="file" id="capGallery" accept="image/*" multiple hidden>
+        <input type="file" id="capCamera" accept="image/*" capture="environment" hidden>
+      </div>
+      <div class="cap-row">
+        <button class="btn" id="capGal" type="button">Galerie photos</button>
+        <button class="btn" id="capCam" type="button">Appareil photo</button>
+        <button class="btn" id="capPick" type="button">Fichiers</button>
         <button class="btn" id="capBulk" type="button">Import en lot</button>
+        <button class="btn" id="capConn" type="button">Drive, Gmail, Notion</button>
         <button class="btn primary" id="capAdd" type="button">Ajouter à l'herbier</button>
       </div>
       <div class="cap-row">
@@ -171,6 +178,7 @@ main { display: flex; flex-direction: column; gap: 20px; min-width: 0 }
         <span class="hint">Ctrl + Entrée pour ajouter · l'analyse se lance toute seule</span>
       </div>
     </section>
+    <section class="studio" id="connPanel" hidden aria-label="Importer depuis vos services"></section>
     <section class="studio" id="importPanel" hidden aria-label="Import en lot"></section>
 
     <div class="toolbar">
@@ -209,7 +217,7 @@ const EXAMPLES = [
 ];
 
 const S = { items: [], synths: [], filter: { cat: null, type: null, topic: null, src: null, q: "" }, tab: "sheets",
-  imp: null, batch: { running: false, stop: false, note: "" },
+  imp: null, batch: { running: false, stop: false, note: "" }, mcp: null, conn: null,
   col: null, local: false, sample: null, canImg: false, downloads: null, open: null, pendingFile: null,
   studio: { scope: "all", mode: "synthese", extra: "", running: false, text: "", ctl: null, scopeLabel: "" },
   plan: null, planRunning: false, loaded: false, loadNote: "" };
@@ -350,6 +358,7 @@ async function parseFile(f) {
 }
 function splitBlocks(t) { return t.split(/^\s*-{3,}\s*$/m).map((b) => b.trim()).filter(Boolean).map((b) => ({ title: firstLine(b), text: b, url: (b.match(/https?:\/\/\S+/) || [""])[0] })); }
 function openImport(entries, label) {
+  S.conn && (S.conn.open = false); renderConn();
   const known = new Set(S.items.map((i) => i.url).filter(Boolean)); const seen = new Set();
   for (const e of entries) { e.dup = !!(e.url && (known.has(e.url) || seen.has(e.url))); if (e.url) seen.add(e.url); e.sel = !e.dup; }
   S.imp = { entries, label, mode: entries.length ? "review" : "paste", auto: entries.length <= 40, busy: false, progress: "" };
@@ -388,7 +397,8 @@ async function doImport() {
   const im = S.imp; const todo = im.entries.filter((e) => e.sel); if (!todo.length) return;
   im.busy = true; let n = 0;
   for (const e of todo) {
-    im.progress = "Import " + (++n) + " / " + todo.length + "…"; renderImport();
+    im.progress = (e.load ? "Lecture et import " : "Import ") + (++n) + " / " + todo.length + "…"; renderImport();
+    if (e.load) { try { Object.assign(e, await e.load()); } catch (err) { toast("« " + clip(e.title, 40) + " » : " + connErr(err, e.source)); continue; } }
     try { await addItem({ text: e.text || "", url: e.url, file: e.file, type: e.type, title: e.title, source: e.source, published: e.published, lang: e.lang, queue: true }); }
     catch { im.progress = "Import interrompu à " + n + " / " + todo.length + "."; im.busy = false; renderImport(); return; }
   }
@@ -396,6 +406,73 @@ async function doImport() {
   toast(todo.length + " fiche(s) importée(s).");
   if (auto) analyzeQueue();
 }
+/* ---------- Connectors (Google Drive, Gmail, Notion) ---------- */
+const CONN = {
+  drive: { server: "Google Drive", label: "Google Drive", ph: "Mots à chercher dans vos documents (vide = derniers modifiés)" },
+  gmail: { server: "Gmail", label: "Gmail", ph: "Recherche Gmail, ex. : label:veille newer_than:7d", def: "in:inbox newer_than:7d" },
+  notion: { server: "Notion", label: "Notion", ph: "Mots à chercher dans vos pages Notion" }
+};
+function connErr(e, server) {
+  const s = server || "le service";
+  switch (e && e.code) {
+    case "server_not_connected": case "selection_required": return "Ajoutez ou choisissez " + s + " dans claude.ai, Réglages, Connecteurs.";
+    case "needs_reauth": return "Reconnectez " + s + " dans claude.ai, Réglages, Connecteurs.";
+    case "not_in_manifest": return "Accès à " + s + " refusé pour cette page. Vous pouvez le réautoriser dans le menu Autorisations de la page.";
+    case "approval_required": return "Cette lecture attend votre approbation. Relancez la recherche pour l'accorder.";
+    case "blocked_by_policy": return s + " est bloqué par votre organisation.";
+    case "server_unavailable": return s + " ne répond pas pour le moment. Réessayez dans un instant.";
+    case "tool_error": return s + " a refusé la demande : " + clip(e.message, 160);
+    default: return "Échec de la lecture (" + ((e && e.code) || "erreur") + ").";
+  }
+}
+const payloadOf = (r) => { let p = r && (r.payload ?? r); if (typeof p === "string") { try { p = JSON.parse(p); } catch {} } return p; };
+const notionText = (t) => String(t || "").replace(/^Here is the result[^\n]*\n/, "").replace(/<[^>]+>/g, "").replace(/\n{3,}/g, "\n\n").trim();
+async function connSearch() {
+  const c = S.conn; const def = CONN[c.src]; const q = ($("connQ").value || "").trim(); c.q = q;
+  c.busy = true; c.err = ""; c.results = []; renderConn();
+  try {
+    let entries = [];
+    if (c.src === "drive") {
+      const esc1 = q.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+      const query = "trashed = false and mimeType != 'application/vnd.google-apps.folder'" + (q ? ` and fullText contains '${esc1}'` : "");
+      const p = payloadOf(await S.mcp.callTool(def.server, "search_files", { query, pageSize: 25, snippetVerbosity: "BRIEF", ...(q ? {} : { orderBy: "modifiedTime desc" }) }));
+      entries = (p.files || []).map((f) => ({ title: f.title || "Sans titre", text: f.contentSnippet || "", url: f.viewUrl || "", source: "Google Drive", published: f.modifiedTime || "",
+        load: async () => { const r = payloadOf(await S.mcp.callTool(def.server, "read_file_content", { fileId: f.id })); return { text: String(r.fileContent || r.content || r.text || f.contentSnippet || "").slice(0, 60000) }; } }));
+    } else if (c.src === "gmail") {
+      const p = payloadOf(await S.mcp.callTool(def.server, "search_threads", { query: q || def.def, pageSize: 25, view: "THREAD_VIEW_SUMMARY" }));
+      entries = (p.threads || []).map((t) => { const m = (t.messages || [])[0] || {}; return { title: m.subject || "(sans objet)", text: htmlToText(m.snippet || ""), url: t.viewUrl || m.viewUrl || "",
+        source: "Gmail · " + (m.sender || ""), published: m.date || "", type: "note",
+        load: async () => { const r = payloadOf(await S.mcp.callTool(def.server, "get_thread", { threadId: t.id, messageFormat: "PLAIN_TEXT" }));
+          return { text: (r.messages || []).map((x) => `De : ${x.sender || ""} · ${x.date || ""}\nObjet : ${x.subject || ""}\n\n${x.plaintextBody || htmlToText(x.snippet || "")}`).join("\n\n---\n\n").slice(0, 60000) }; } }; });
+    } else {
+      const p = payloadOf(await S.mcp.callTool(def.server, "notion-search", { query: q || "notes", page_size: 25 }));
+      entries = (p.results || []).filter((r) => r.type !== "database" && r.type !== "data_source").map((r) => ({ title: r.title || "Sans titre", text: r.highlight || "", url: r.url || "", source: "Notion", published: r.timestamp || "",
+        load: async () => { const x = payloadOf(await S.mcp.callTool(def.server, "notion-fetch", { id: r.id })); return { text: notionText(x.text || x.content || "").slice(0, 60000) }; } }));
+    }
+    c.busy = false;
+    if (!entries.length) { c.err = "Aucun résultat."; renderConn(); return; }
+    openImport(entries, def.label + (q ? " · « " + q + " »" : ""));
+    S.imp.auto = entries.length <= 40; renderImport();
+  } catch (e) { c.busy = false; c.err = connErr(e, def.label); renderConn(); }
+}
+function renderConn() {
+  const p = $("connPanel"); const c = S.conn;
+  if (!c || !c.open) { p.hidden = true; p.innerHTML = ""; return; }
+  p.hidden = false;
+  if (!S.mcp) { p.innerHTML = `<div class="cap-row"><h3 style="font-size:17px">Importer depuis vos services</h3><button class="btn sm close" id="connX" type="button">Fermer</button></div>
+    <p class="muted" style="margin:0">Cette fonction marche quand la page est ouverte dans claude.ai avec vos connecteurs (Google Drive, Gmail, Notion) activés.</p>`; $("connX").onclick = () => { c.open = false; renderConn(); }; return; }
+  const def = CONN[c.src];
+  p.innerHTML = `<div class="cap-row"><h3 style="font-size:17px">Importer depuis vos services</h3><button class="btn sm close" id="connX" type="button">Fermer</button></div>
+    <div class="modes">${Object.entries(CONN).map(([k, v]) => `<button class="chip" data-src="${k}" aria-pressed="${c.src === k}">${v.label}</button>`).join("")}</div>
+    <div class="cap-row"><input class="search" id="connQ" placeholder="${esc(def.ph)}" value="${esc(c.q || "")}"><button class="btn primary" id="connGo" type="button"${c.busy ? " disabled" : ""}>${c.busy ? "Recherche…" : "Rechercher"}</button></div>
+    <p class="muted" style="margin:0;font-size:13px">Les résultats s'affichent dans l'aperçu d'import : cochez ce que vous voulez garder. Le contenu complet n'est lu qu'à l'import, et reste dans votre espace privé.</p>
+    ${c.err ? `<div class="banner">${esc(c.err)}</div>` : ""}`;
+  p.querySelectorAll("[data-src]").forEach((b) => (b.onclick = () => { c.src = b.dataset.src; c.q = ""; c.err = ""; renderConn(); }));
+  $("connGo").onclick = connSearch;
+  $("connQ").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); connSearch(); } };
+  $("connX").onclick = () => { c.open = false; renderConn(); };
+}
+
 async function analyzeQueue() {
   if (!S.sample || S.batch.running) return;
   const B = S.batch; B.running = true; B.stop = false;
@@ -757,6 +834,11 @@ $("capAdd").onclick = addFromCapture;
 $("capPick").onclick = () => $("capFile").click();
 $("capFile").onchange = (e) => { acceptFiles(e.target.files); e.target.value = ""; };
 $("capBulk").onclick = () => { if (!S.imp || !S.imp.busy) openImport([], ""); };
+$("capGal").onclick = () => $("capGallery").click();
+$("capCam").onclick = () => $("capCamera").click();
+$("capGallery").onchange = (e) => { acceptFiles(e.target.files); e.target.value = ""; };
+$("capCamera").onchange = (e) => { acceptFiles(e.target.files); e.target.value = ""; };
+$("capConn").onclick = () => { if (S.imp && S.imp.busy) return; S.imp = null; renderImport(); S.conn = S.conn || { src: "drive", q: "", busy: false, err: "" }; S.conn.open = true; renderConn(); $("connPanel").scrollIntoView({ behavior: "smooth", block: "start" }); };
 $("runQueue").onclick = () => { if (S.batch.running) { S.batch.stop = true; $("runQueue").textContent = "Arrêt après ce lot…"; } else analyzeQueue(); };
 $("capText").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); addFromCapture(); } });
 $("capText").addEventListener("paste", (e) => { const f = [...(e.clipboardData?.files || [])].find((x) => x.type.startsWith("image/")); if (f) { e.preventDefault(); setAttach(f); } });
@@ -776,8 +858,8 @@ function goLocal(note) { S.local = true; S.col = null; ingest(localLoad()); S.lo
 render();
 (async () => {
   const use = (n) => (window.claude && window.claude.use ? window.claude.use(n).catch(() => null) : Promise.resolve(null));
-  const [db, user, sample, downloads] = await Promise.all([use("db"), use("user"), use("sample"), use("downloads")]);
-  S.sample = sample; S.downloads = downloads;
+  const [db, user, sample, downloads, mcp] = await Promise.all([use("db"), use("user"), use("sample"), use("downloads"), use("mcp")]);
+  S.sample = sample; S.downloads = downloads; S.mcp = mcp; if (S.conn && S.conn.open) renderConn();
   if (sample) { try { const lim = await sample.limits(); S.canImg = !!lim.images; } catch { S.canImg = false; } }
   let uid = null; if (user) { try { uid = await user.id(); } catch {} }
   if (!db || !uid) return goLocal();

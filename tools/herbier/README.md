@@ -17,6 +17,13 @@ Outil de collecte et d'organisation de notes, idées, articles, citations, tâch
 Les fiches sont enregistrées dans l'espace privé de l'utilisateur connecté (capability `db`, chemin `data/users/<id>`), invisible des autres personnes, propriétaire compris.
 Hors claude.ai, la page fonctionne en mode local (navigateur) avec un classement simple par mots-clés.
 
+## Sources d'import
+- **Galerie photos** : sélection de une ou plusieurs photos du téléphone (plusieurs photos = une fiche par photo, avec aperçu).
+- **Appareil photo** : prise de vue directe (tableau blanc, page de livre, affiche… le texte est lu par Claude).
+- **Fichiers** : images, textes, flux RSS/Atom, JSON.
+- **Coller** : texte ou image collés dans la zone de saisie.
+- **Drive, Gmail, Notion** : recherche dans vos connecteurs claude.ai (Google Drive : documents, PDF, présentations… ; Gmail : syntaxe de recherche Gmail ; Notion : pages). Le contenu complet n'est lu qu'à l'import des éléments cochés. Chaque service demande votre autorisation à la première utilisation.
+
 ## Import en lot
 - Bouton **Import en lot** : collez plusieurs notes séparées par une ligne `---`, ou choisissez plusieurs fichiers.
 - Formats acceptés : images, `.txt`/`.md` (une fiche par fichier), flux RSS/Atom (`.xml`, `.rss`, `.atom`), JSON (`herbier-import.json` ou tableau d'objets `{title, text, url, source}`).
