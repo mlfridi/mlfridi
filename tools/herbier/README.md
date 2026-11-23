@@ -48,3 +48,13 @@ python3 scripts/tools/rss_to_herbier.py --keyword maroc --keyword sahel
 Lancez-le là où les flux sont joignables (conteneur Hermes de SIO ou votre ordinateur), puis glissez le
 fichier `.json` sur la zone de collecte de l'Herbier. Le résumé par flux (OK/FAIL et nombre d'articles
 retenus) s'affiche à la fin de l'exécution.
+
+## Collecte automatique du matin
+Une tâche planifiée « Collecte Herbier » tourne chaque jour à 7 h 44 (heure de Paris). Elle :
+1. lit les fiches existantes (pour éviter les doublons et réutiliser les catégories) ;
+2. récupère les emails marqués d'une étoile depuis 2 jours (connecteur Gmail) ;
+3. lit les flux RSS SIO avec `scripts/tools/rss_to_herbier.py` et garde les 15 articles les plus pertinents ;
+4. classe chaque élément (titre, type, catégorie, sujets, résumé, suggestions) ;
+5. les dépose dans la **Boîte de réception** de l'Herbier (`inbox: true`), en tête de l'onglet Fiches : Garder / Jeter, ou Tout garder / Tout jeter.
+
+Prérequis : les domaines des flux RSS doivent être autorisés dans le réseau de l'environnement cloud, et la tâche doit avoir le connecteur Gmail.

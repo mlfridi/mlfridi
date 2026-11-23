@@ -258,7 +258,7 @@ const STAGES = [
 ];
 const stageOf = (it) => STAGES.find((s) => s.k === it.stage) || STAGES[0];
 const stageChip = (it) => { const s = stageOf(it); return `<span class="stage" style="--h:${s.h}" title="${esc(s.d)}">${s.label}</span>`; };
-const S = { items: [], synths: [], ask: { turns: [], running: false, ctl: null, live: "", draft: "", note: "" }, canTools: false, dayOffset: 0, filter: { cat: null, type: null, topic: null, src: null, q: "" }, tab: "sheets",
+const S = { items: [], inbox: [], synths: [], ask: { turns: [], running: false, ctl: null, live: "", draft: "", note: "" }, canTools: false, dayOffset: 0, filter: { cat: null, type: null, topic: null, src: null, q: "" }, tab: "sheets",
   imp: null, batch: { running: false, stop: false, note: "" }, mcp: null, conn: null,
   col: null, local: false, sample: null, canImg: false, downloads: null, open: null, pendingFile: null,
   studio: { scope: "all", mode: "synthese", extra: "", running: false, text: "", ctl: null, scopeLabel: "" },
@@ -286,9 +286,10 @@ function sampleErr(e) {
 /* ---------- Storage ---------- */
 const LS_KEY = "herbier-local-v1";
 function localLoad() { try { const d = JSON.parse(localStorage.getItem(LS_KEY) || "[]"); return Array.isArray(d) ? d : []; } catch { return []; } }
-function localSave() { try { localStorage.setItem(LS_KEY, JSON.stringify([...S.items, ...S.synths])); } catch { toast("Stockage local indisponible : les données seront perdues à la fermeture."); } }
+function localSave() { try { localStorage.setItem(LS_KEY, JSON.stringify([...S.items, ...S.inbox, ...S.synths])); } catch { toast("Stockage local indisponible : les données seront perdues à la fermeture."); } }
 function ingest(docs) {
-  S.items = docs.filter((d) => d.kind === "item").sort((a, b) => b.createdAt - a.createdAt);
+  const all = docs.filter((d) => d.kind === "item").sort((a, b) => b.createdAt - a.createdAt);
+  S.items = all.filter((d) => !d.inbox); S.inbox = all.filter((d) => d.inbox);
   S.synths = docs.filter((d) => d.kind === "synth").sort((a, b) => b.createdAt - a.createdAt);
 }
 async function put(doc) {
@@ -297,11 +298,11 @@ async function put(doc) {
 }
 async function patch(id, data) {
   if (S.col) { try { await S.col.doc(id).update(data); } catch (e) { toast("Mise à jour impossible (" + e.code + ")."); } }
-  else { const it = [...S.items, ...S.synths].find((x) => x.id === id); if (it) Object.assign(it, data); localSave(); render(); }
+  else { const it = [...S.items, ...S.inbox, ...S.synths].find((x) => x.id === id); if (it) Object.assign(it, data); ingest([...S.items, ...S.inbox, ...S.synths]); localSave(); render(); }
 }
 async function remove(id) {
   if (S.col) { try { await S.col.doc(id).delete(); } catch (e) { toast("Suppression impossible (" + e.code + ")."); } }
-  else { S.items = S.items.filter((x) => x.id !== id); S.synths = S.synths.filter((x) => x.id !== id); localSave(); render(); }
+  else { S.items = S.items.filter((x) => x.id !== id); S.inbox = S.inbox.filter((x) => x.id !== id); S.synths = S.synths.filter((x) => x.id !== id); localSave(); render(); }
 }
 
 /* ---------- Heuristics (when Claude is unavailable) ---------- */
@@ -770,7 +771,7 @@ function sheetHTML(it) {
 }
 function renderSheets(v) {
   const items = visibleItems(); const f = S.filter;
-  if (!S.items.length) {
+  if (!S.items.length && !S.inbox.length) {
     v.innerHTML = S.loaded ? `<div class="empty"><h2>L'herbier est vide</h2>
       <p>Collez une note, un lien ou le texte d'un article, ou déposez une capture d'écran dans la zone ci-dessus. Chaque élément devient une fiche : titre, type, catégorie, sujets, résumé et suggestions sont proposés automatiquement.</p>
       <button class="btn" id="seed" type="button">Charger 5 fiches d'exemple</button></div>`
@@ -779,14 +780,14 @@ function renderSheets(v) {
     return;
   }
   const active = [f.cat && "catégorie « " + f.cat + " »", f.type && "type « " + f.type + " »", f.topic && "sujet « " + f.topic + " »", f.src && "source « " + f.src + " »", f.q && "recherche « " + f.q + " »"].filter(Boolean);
-  let html = active.length ? `<div class="banner">${items.length} fiche(s) · ${esc(active.join(", "))} <button class="btn sm" id="clearF" type="button">Tout afficher</button></div>` : dailyHTML();
+  let html = active.length ? `<div class="banner">${items.length} fiche(s) · ${esc(active.join(", "))} <button class="btn sm" id="clearF" type="button">Tout afficher</button></div>` : inboxHTML() + dailyHTML();
   if (!items.length) html += '<div class="empty"><p>Aucune fiche ne correspond.</p></div>';
   const groups = new Map(); for (const it of items) { const c = it.category || "Non classé"; if (!groups.has(c)) groups.set(c, []); groups.get(c).push(it); }
   const order = categories().map(([c]) => c).filter((c) => groups.has(c));
   html += order.map((c) => `<section class="group"><div class="group-head" style="--h:${hue(c)}"><span class="dot"></span><h2>${esc(c)}</h2><span class="n">${groups.get(c).length} fiche(s)</span></div>
     <div class="grid">${groups.get(c).map(sheetHTML).join("")}</div></section>`).join("");
   v.innerHTML = `<div style="display:flex;flex-direction:column;gap:24px">${html}</div>`;
-  wireDaily();
+  wireDaily(); wireInbox(v);
   const cf = $("clearF"); if (cf) cf.onclick = () => { S.filter = { cat: null, type: null, topic: null, src: null, q: "" }; $("search").value = ""; render(); };
   v.querySelectorAll("[data-open]").forEach((b) => (b.onclick = () => { S.open = b.dataset.open; renderDrawer(); }));
 }
@@ -867,6 +868,27 @@ function renderDrawer() {
   const del = $("dDel"); del.onclick = () => { if (del.dataset.armed) { remove(it.id); close(); } else { del.dataset.armed = 1; del.textContent = "Confirmer la suppression"; } };
   $("dClose").focus();
 }
+/* ---------- Inbox (automatic morning collection) ---------- */
+function inboxHTML() {
+  if (!S.inbox.length) return "";
+  const list = S.inbox.slice(0, 40);
+  return `<section class="studio" aria-label="Boîte de réception"><div class="cap-row"><h3 style="font-size:17px">Boîte de réception</h3><span class="muted" style="font-size:13px"><b class="mono">${S.inbox.length}</b> nouveauté(s) de la collecte automatique, déjà classée(s) par Claude</span>
+      <span style="margin-left:auto;display:flex;gap:6px"><button class="btn sm primary" id="inKeepAll" type="button">Tout garder</button><button class="btn sm danger" id="inDropAll" type="button">Tout jeter</button></span></div>
+    <div class="imp-list" style="max-height:none">${list.map((it) => `<div class="imp-row" style="grid-template-columns:minmax(0,1fr) auto"><span>
+      <span class="t">${esc(it.title)}</span><br><span class="s">${esc([it.source, it.published && fmtDate(it.published)].filter(Boolean).join(" · "))}</span>
+      ${it.summary ? `<br><span style="font-size:13px">${esc(clip(it.summary, 220))}</span>` : ""}
+      <br><span class="chip cat" style="--h:${hue(it.category || "Non classé")};margin-top:4px">${esc(it.category || "Non classé")}</span> ${it.url ? `<a href="${esc(it.url)}" target="_blank" rel="noopener" style="color:var(--accent);font-size:12.5px">Lire la source</a>` : ""}</span>
+      <span style="display:flex;flex-direction:column;gap:6px"><button class="btn sm primary" type="button" data-keep="${it.id}">Garder</button><button class="btn sm" type="button" data-drop="${it.id}">Jeter</button></span></div>`).join("")}</div>
+    ${S.inbox.length > list.length ? `<span class="muted" style="font-size:13px">${S.inbox.length - list.length} autre(s) après ce tri.</span>` : ""}</section>`;
+}
+function wireInbox(v) {
+  v.querySelectorAll("[data-keep]").forEach((b) => (b.onclick = () => { b.disabled = true; patch(b.dataset.keep, { inbox: false, keptAt: Date.now() }); }));
+  v.querySelectorAll("[data-drop]").forEach((b) => (b.onclick = () => { b.disabled = true; remove(b.dataset.drop); }));
+  const ka = $("inKeepAll"), da = $("inDropAll");
+  if (ka) ka.onclick = async () => { ka.disabled = true; const ids = S.inbox.slice(0, 40).map((i) => i.id); for (const id of ids) await patch(id, { inbox: false, keptAt: Date.now() }); toast(ids.length + " fiche(s) gardée(s)."); };
+  if (da) da.onclick = async () => { if (!da.dataset.armed) { da.dataset.armed = 1; da.textContent = "Confirmer ?"; return; } da.disabled = true; const ids = S.inbox.slice(0, 40).map((i) => i.id); for (const id of ids) await remove(id); toast(ids.length + " fiche(s) jetée(s)."); };
+}
+
 /* ---------- Idea life cycle ---------- */
 async function setStage(id, k) {
   const it = S.items.find((x) => x.id === id); if (!it || stageOf(it).k === k) return;
