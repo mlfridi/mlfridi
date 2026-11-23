@@ -515,10 +515,13 @@ function renderConn() {
   $("connX").onclick = () => { c.open = false; renderConn(); };
 }
 
+const STARTED = Date.now();
+// An analysis left "pending" by a closed page before this load never finishes: count it as waiting.
+const isWaiting = (i) => i.status === "queued" || (i.status === "pending" && !S.batch.live?.has(i.id) && i.createdAt < STARTED - 120000);
 async function analyzeQueue() {
   if (!S.sample || S.batch.running) return;
   const B = S.batch; B.running = true; B.stop = false;
-  const queued = () => S.items.filter((i) => i.status === "queued");
+  const queued = () => S.items.filter(isWaiting);
   const total = queued().length; let done = 0;
   const upd = () => { B.note = "Analyse en cours : " + done + " / " + total + " fiches."; render(); };
   upd();
@@ -570,7 +573,7 @@ async function addItem({ text, url, file, example, type, title, source, publishe
     status: S.sample ? (queue ? "queued" : "pending") : "local", example: !!example, createdAt: Date.now() + Math.random() };
   if (!S.sample) Object.assign(item, heuristic(item));
   await put(item);
-  if (S.sample && !queue) analyze(item, file && file.type.startsWith("image/") ? file : null);
+  if (S.sample && !queue) { (S.batch.live = S.batch.live || new Set()).add(id); analyze(item, file && file.type.startsWith("image/") ? file : null).finally(() => S.batch.live.delete(id)); }
   return item;
 }
 
@@ -1000,7 +1003,7 @@ function renderAsk(v) {
 function render() {
   renderRail();
   for (const [id, t] of [["tabSheets", "sheets"], ["tabCycle", "cycle"], ["tabAsk", "ask"], ["tabStudio", "studio"]]) $(id).setAttribute("aria-selected", S.tab === t);
-  const nq = S.items.filter((i) => i.status === "queued").length; const rq = $("runQueue");
+  const nq = S.items.filter(isWaiting).length; const rq = $("runQueue");
   rq.hidden = !S.sample || (!nq && !S.batch.running);
   rq.textContent = S.batch.running ? "Arrêter l'analyse" : "Analyser " + nq + " fiche(s) en attente";
   const b = $("banner");
