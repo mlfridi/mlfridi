@@ -919,12 +919,18 @@ function nearDup(it) {
 
 /* ---------- Voice dictation ---------- */
 const DICT = { d: null, target: null, off: false };
+const TOUCH = (() => { try { return matchMedia("(pointer: coarse)").matches; } catch { return false; } })();
 function micsRender() {
   const on = !!DICT.d && !DICT.off; const active = on && DICT.d.active();
-  document.querySelectorAll("[data-mic]").forEach((b) => { b.hidden = !on; b.textContent = active && DICT.target === b.dataset.mic ? "Arrêter la dictée" : "Dicter"; b.classList.toggle("primary", active && DICT.target === b.dataset.mic); });
+  document.querySelectorAll("[data-mic]").forEach((b) => { b.hidden = !on && !TOUCH; b.textContent = active && DICT.target === b.dataset.mic ? "Arrêter la dictée" : "Dicter"; b.classList.toggle("primary", active && DICT.target === b.dataset.mic); });
 }
 function micClick(targetId) {
-  const d = DICT.d; if (!d) return;
+  const d = DICT.d;
+  if (!d || DICT.off) {
+    const el = $(targetId); if (el && !el.disabled) { el.focus(); el.scrollIntoView({ block: "center", behavior: "smooth" }); }
+    toast("Touchez le micro de votre clavier pour dicter.");
+    return;
+  }
   if (d.active()) { d.stop().catch(() => {}); return; }
   DICT.target = targetId;
   d.start().catch((e) => {
@@ -935,7 +941,7 @@ function micClick(targetId) {
   micsRender();
 }
 function initDictation(d) {
-  if (!d) return; DICT.d = d;
+  if (!d) { micsRender(); return; } DICT.d = d;
   d.onPartial(({ text }) => { const t = $("toast"); t.textContent = "Écoute : " + text; t.hidden = false; clearTimeout(toast.t); });
   d.onFinal(({ text }) => {
     const el = $(DICT.target); if (!el || !text) return;
