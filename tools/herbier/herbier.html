@@ -22,6 +22,7 @@
   --chip-l: 24%; --chip-ink: #E4EBE6; --shadow: 0 1px 2px rgb(0 0 0 / .3); color-scheme: dark }
 
 * { box-sizing: border-box }
+[hidden] { display: none !important }
 body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--f-body); }
 button, input, select, textarea { font: inherit; color: inherit }
 button { cursor: pointer }
@@ -144,6 +145,12 @@ main { display: flex; flex-direction: column; gap: 20px; min-width: 0 }
 .drawer .meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px }
 .drawer a { color: var(--accent); overflow-wrap: anywhere }
 .close { margin-left: auto }
+.imp-list { max-height: 360px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--bg) }
+.imp-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; padding: 8px 10px; border-bottom: 1px solid var(--line); font-size: 13.5px; align-items: start }
+.imp-row:last-child { border-bottom: 0 }
+.imp-row .t { font-weight: 600; overflow-wrap: anywhere }
+.imp-row .s { color: var(--muted); font-size: 12px; overflow-wrap: anywhere }
+.imp-row.dup { opacity: .55 }
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-size: 14px; z-index: 30; max-width: calc(100% - 32px) }
 </style>
 
@@ -154,8 +161,9 @@ main { display: flex; flex-direction: column; gap: 20px; min-width: 0 }
       <textarea id="capText" placeholder="Collez une note, une idée, une citation, le texte d'un article, un lien… ou déposez / collez une image ici."></textarea>
       <div class="cap-row">
         <input type="url" id="capUrl" placeholder="Source (lien), facultatif">
-        <input type="file" id="capFile" accept="image/*,.txt,.md,.markdown,.csv,.json,text/plain" hidden>
-        <button class="btn" id="capPick" type="button">Image ou fichier</button>
+        <input type="file" id="capFile" accept="image/*,.txt,.md,.markdown,.csv,.json,.xml,.rss,.atom,text/plain" multiple hidden>
+        <button class="btn" id="capPick" type="button">Images ou fichiers</button>
+        <button class="btn" id="capBulk" type="button">Import en lot</button>
         <button class="btn primary" id="capAdd" type="button">Ajouter à l'herbier</button>
       </div>
       <div class="cap-row">
@@ -163,6 +171,7 @@ main { display: flex; flex-direction: column; gap: 20px; min-width: 0 }
         <span class="hint">Ctrl + Entrée pour ajouter · l'analyse se lance toute seule</span>
       </div>
     </section>
+    <section class="studio" id="importPanel" hidden aria-label="Import en lot"></section>
 
     <div class="toolbar">
       <div class="tabs" role="tablist">
@@ -170,6 +179,7 @@ main { display: flex; flex-direction: column; gap: 20px; min-width: 0 }
         <button class="tab" role="tab" id="tabStudio" aria-selected="false">Synthèses &amp; suggestions</button>
       </div>
       <input class="search" id="search" type="search" placeholder="Rechercher dans le titre, le texte, les sujets…">
+      <button class="btn sm primary" id="runQueue" type="button" hidden></button>
       <button class="btn sm" id="reorg" type="button">Réorganiser les catégories</button>
       <button class="btn sm" id="exportAll" type="button">Exporter (.md)</button>
     </div>
@@ -198,7 +208,8 @@ const EXAMPLES = [
   { text: "Question : comment mesurer la fiabilité d'une source d'information au fil du temps ? Taux de correction, délai de publication, recoupements…", type: "question" }
 ];
 
-const S = { items: [], synths: [], filter: { cat: null, type: null, topic: null, q: "" }, tab: "sheets",
+const S = { items: [], synths: [], filter: { cat: null, type: null, topic: null, src: null, q: "" }, tab: "sheets",
+  imp: null, batch: { running: false, stop: false, note: "" },
   col: null, local: false, sample: null, canImg: false, downloads: null, open: null, pendingFile: null,
   studio: { scope: "all", mode: "synthese", extra: "", running: false, text: "", ctl: null, scopeLabel: "" },
   plan: null, planRunning: false, loaded: false, loadNote: "" };
@@ -288,12 +299,139 @@ function setAttach(file) {
   if (isImg) readAsDataURL(file).then((u) => { const p = $("capPrev"); if (p) p.src = u; });
   $("capRm").onclick = () => setAttach(null);
 }
-async function acceptFile(file) {
-  if (!file) return;
-  if (file.type.startsWith("image/")) return setAttach(file);
-  if (file.size > 2e6) return toast("Fichier texte trop volumineux (2 Mo max).");
-  const txt = await file.text(); const ta = $("capText");
-  ta.value = (ta.value ? ta.value + "\n\n" : "") + txt; if (!$("capUrl").value) $("capUrl").placeholder = "Source : " + file.name;
+const isImg = (f) => (f.type || "").startsWith("image/");
+const isStructured = (f) => /\.(json|xml|rss|atom)$/i.test(f.name || "") || /json|xml|rss|atom/.test(f.type || "");
+async function acceptFiles(list) {
+  const files = [...(list || [])]; if (!files.length) return;
+  if (files.length === 1 && isImg(files[0])) return setAttach(files[0]);
+  if (files.length === 1 && !isStructured(files[0])) {
+    const file = files[0]; if (file.size > 2e6) return toast("Fichier texte trop volumineux (2 Mo max).");
+    const txt = await file.text(); const ta = $("capText");
+    ta.value = (ta.value ? ta.value + "\n\n" : "") + txt; if (!$("capUrl").value) $("capUrl").placeholder = "Source : " + file.name;
+    return;
+  }
+  const entries = [];
+  for (const f of files) { try { entries.push(...(await parseFile(f))); } catch (e) { toast("« " + f.name + " » n'a pas pu être lu."); } }
+  openImport(entries, files.length === 1 ? files[0].name : files.length + " fichiers");
+}
+
+/* ---------- Bulk import ---------- */
+function htmlToText(s) {
+  if (!s) return ""; if (!/[<&]/.test(s)) return s.trim();
+  const d = new DOMParser().parseFromString(s, "text/html"); d.querySelectorAll("script,style").forEach((n) => n.remove());
+  return (d.body.textContent || "").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+function parseFeed(xml, fallbackName) {
+  const doc = new DOMParser().parseFromString(xml, "text/xml");
+  if (doc.querySelector("parsererror")) throw new Error("xml");
+  const kid = (el, names) => { for (const n of names) { const c = [...el.children].find((x) => x.localName === n || x.nodeName === n); if (c && c.textContent.trim()) return c; } return null; };
+  const chan = doc.querySelector("channel") || doc.documentElement;
+  const feedName = (kid(chan, ["title"])?.textContent || fallbackName || "Flux").trim();
+  return [...doc.querySelectorAll("item, entry")].map((it) => {
+    const linkEl = [...it.children].find((x) => x.localName === "link" && (!x.getAttribute("rel") || x.getAttribute("rel") === "alternate"));
+    const url = (linkEl && (linkEl.getAttribute("href") || linkEl.textContent) || kid(it, ["guid", "id"])?.textContent || "").trim();
+    const body = kid(it, ["encoded", "content", "description", "summary"])?.textContent || "";
+    return { title: htmlToText(kid(it, ["title"])?.textContent || "").slice(0, 200), text: htmlToText(body).slice(0, 20000), url: /^https?:/i.test(url) ? url : "",
+      source: feedName, published: (kid(it, ["pubDate", "published", "updated", "date"])?.textContent || "").trim(), type: "article" };
+  }).filter((e) => e.title || e.text);
+}
+async function parseFile(f) {
+  if (isImg(f)) return [{ file: f, title: f.name, text: "", type: "image" }];
+  if (f.size > 15e6) throw new Error("size");
+  const txt = await f.text();
+  if (/\.json$/i.test(f.name) || /^\s*[\[{]/.test(txt) && /json/.test(f.type)) {
+    const j = JSON.parse(txt); const arr = Array.isArray(j) ? j : Array.isArray(j.items) ? j.items : [];
+    return arr.filter((x) => x && typeof x === "object").map((x) => ({ title: String(x.title || "").slice(0, 200), text: String(x.text || x.content || x.summary || ""), url: String(x.url || x.link || ""),
+      source: String(x.source || x.feed || ""), published: String(x.published || x.date || ""), lang: String(x.lang || ""), type: TYPES.includes(x.type) ? x.type : (x.url || x.link ? "article" : "") }))
+      .filter((e) => e.title || e.text);
+  }
+  if (/^\s*(<\?xml|<rss|<feed|<rdf)/i.test(txt)) return parseFeed(txt, f.name);
+  return [{ title: firstLine(txt) || f.name, text: txt.slice(0, 50000), source: f.name }];
+}
+function splitBlocks(t) { return t.split(/^\s*-{3,}\s*$/m).map((b) => b.trim()).filter(Boolean).map((b) => ({ title: firstLine(b), text: b, url: (b.match(/https?:\/\/\S+/) || [""])[0] })); }
+function openImport(entries, label) {
+  const known = new Set(S.items.map((i) => i.url).filter(Boolean)); const seen = new Set();
+  for (const e of entries) { e.dup = !!(e.url && (known.has(e.url) || seen.has(e.url))); if (e.url) seen.add(e.url); e.sel = !e.dup; }
+  S.imp = { entries, label, mode: entries.length ? "review" : "paste", auto: entries.length <= 40, busy: false, progress: "" };
+  renderImport(); $("importPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+function renderImport() {
+  const p = $("importPanel"); const im = S.imp;
+  if (!im) { p.hidden = true; p.innerHTML = ""; return; }
+  p.hidden = false;
+  if (im.mode === "paste") {
+    p.innerHTML = `<div class="cap-row"><h3 style="font-size:17px">Import en lot</h3><button class="btn sm close" id="impX" type="button">Fermer</button></div>
+      <p class="muted" style="margin:0;font-size:13.5px">Collez plusieurs notes séparées par une ligne <span class="mono">---</span>, ou choisissez plusieurs fichiers : images, textes, flux RSS/Atom (.xml) ou fichier <span class="mono">herbier-import.json</span> produit par le script des flux SIO.</p>
+      <div class="field"><label for="impText">Notes</label><textarea id="impText" rows="7" placeholder="Première note…&#10;---&#10;Deuxième note…"></textarea></div>
+      <div class="cap-row"><button class="btn primary" id="impSplit" type="button">Prévisualiser</button><button class="btn" id="impFiles" type="button">Choisir des fichiers</button></div>`;
+    $("impSplit").onclick = () => { const v = $("impText").value.trim(); if (!v) return toast("Collez au moins une note."); openImport(splitBlocks(v), "notes collées"); };
+    $("impFiles").onclick = () => $("capFile").click();
+  } else {
+    const sel = im.entries.filter((e) => e.sel).length; const dups = im.entries.filter((e) => e.dup).length; const shown = im.entries.slice(0, 400);
+    p.innerHTML = `<div class="cap-row"><h3 style="font-size:17px">Importer depuis ${esc(im.label)}</h3><button class="btn sm close" id="impX" type="button">Fermer</button></div>
+      <div class="cap-row" style="font-size:13.5px"><span><b class="mono">${im.entries.length}</b> élément(s) trouvé(s)${dups ? ` · <b class="mono">${dups}</b> déjà dans l'herbier (décochés)` : ""}</span>
+        <button class="btn sm" id="impAll" type="button">Tout cocher</button><button class="btn sm" id="impNone" type="button">Tout décocher</button></div>
+      <div class="imp-list">${shown.map((e, i) => `<label class="imp-row${e.dup ? " dup" : ""}"><input type="checkbox" data-i="${i}"${e.sel ? " checked" : ""}${im.busy ? " disabled" : ""}>
+        <span><span class="t">${esc(e.title || clip(e.text, 80) || "(sans titre)")}</span><br><span class="s">${esc([e.source, e.published && fmtDate(e.published), e.dup && "déjà importé", e.url].filter(Boolean).join(" · "))}</span></span></label>`).join("")}
+        ${im.entries.length > shown.length ? `<div class="imp-row"><span></span><span class="s">Les ${im.entries.length - shown.length} suivants seront importés selon leur état.</span></div>` : ""}</div>
+      <label class="cap-row" style="font-size:13.5px"><input type="checkbox" id="impAuto"${im.auto && S.sample ? " checked" : ""}${S.sample ? "" : " disabled"}> Analyser avec Claude juste après l'import${S.sample ? "" : " (indisponible ici)"}</label>
+      <div class="cap-row"><button class="btn primary" id="impGo" type="button"${sel && !im.busy ? "" : " disabled"}>Importer ${sel} élément(s)</button><span class="muted" style="font-size:13px">${esc(im.progress)}</span></div>`;
+    p.querySelectorAll("[data-i]").forEach((c) => (c.onchange = () => { im.entries[+c.dataset.i].sel = c.checked; renderImport(); }));
+    $("impAll").onclick = () => { im.entries.forEach((e) => (e.sel = true)); renderImport(); };
+    $("impNone").onclick = () => { im.entries.forEach((e) => (e.sel = false)); renderImport(); };
+    $("impAuto").onchange = (e) => (im.auto = e.target.checked);
+    $("impGo").onclick = doImport;
+  }
+  $("impX").onclick = () => { if (!im.busy) { S.imp = null; renderImport(); } };
+}
+async function doImport() {
+  const im = S.imp; const todo = im.entries.filter((e) => e.sel); if (!todo.length) return;
+  im.busy = true; let n = 0;
+  for (const e of todo) {
+    im.progress = "Import " + (++n) + " / " + todo.length + "…"; renderImport();
+    try { await addItem({ text: e.text || "", url: e.url, file: e.file, type: e.type, title: e.title, source: e.source, published: e.published, lang: e.lang, queue: true }); }
+    catch { im.progress = "Import interrompu à " + n + " / " + todo.length + "."; im.busy = false; renderImport(); return; }
+  }
+  const auto = im.auto && S.sample; S.imp = null; renderImport();
+  toast(todo.length + " fiche(s) importée(s).");
+  if (auto) analyzeQueue();
+}
+async function analyzeQueue() {
+  if (!S.sample || S.batch.running) return;
+  const B = S.batch; B.running = true; B.stop = false;
+  const queued = () => S.items.filter((i) => i.status === "queued");
+  const total = queued().length; let done = 0;
+  const upd = () => { B.note = "Analyse en cours : " + done + " / " + total + " fiches."; render(); };
+  upd();
+  try {
+    while (!B.stop) {
+      const q = queued(); if (!q.length) break;
+      const imgs = q.filter((i) => i.image); const txt = q.filter((i) => !i.image).slice(0, 12);
+      if (!txt.length) { const it = imgs[0]; await patch(it.id, { status: "pending" }); await analyze(it, null); done++; upd(); continue; }
+      const cats = categories().map(([c]) => c).filter((c) => c !== "Non classé");
+      const prompt = `Tu es l'archiviste d'une base de connaissances personnelle. Classe chacune des fiches ci-dessous.
+Catégories déjà utilisées : ${cats.length ? cats.join(" ; ") : "(aucune)"}. Réutilise-les quand elles conviennent ; sinon crée des catégories larges et durables (1 à 3 mots, français, majuscule initiale), cohérentes entre les fiches de ce lot.
+Types possibles : ${TYPES.join(", ")}.
+Réponds uniquement avec un tableau JSON, un objet par fiche, dans cette forme :
+[{"id":"…","title":"titre court ≤ 70 caractères","type":"…","category":"…","topics":["2 à 5 sujets"],"keywords":["3 à 8"],"summary":"1 à 3 phrases","actions":["0 à 2 suggestions concrètes"]}]
+Rédige en français (garde les noms propres).
+
+${txt.map((i) => `### id=${i.id}\nSource : ${i.source || i.url || "—"}\nTitre : ${i.title}\n${clip(i.text, 2500)}`).join("\n\n")}`;
+      let res;
+      try { res = await S.sample.json(prompt, { modelTier: "quick" }); }
+      catch (e) { const m = sampleErr(e); if (m) toast(m); break; }
+      const byId = new Map((Array.isArray(res) ? res : []).filter((r) => r && r.id).map((r) => [String(r.id), r]));
+      const arr = (v, n) => (Array.isArray(v) ? v.map(String).map((s) => s.trim()).filter(Boolean).slice(0, n) : []);
+      for (const it of txt) {
+        const r = byId.get(it.id);
+        if (!r) { await patch(it.id, { ...heuristic(it), status: "error", error: "Non classée par le lot : utilisez « Ré-analyser »." }); }
+        else await patch(it.id, { title: clip(String(r.title || it.title), 90), type: TYPES.includes(r.type) ? r.type : it.type, category: clip(String(r.category || "Non classé"), 40),
+          topics: arr(r.topics, 5), keywords: arr(r.keywords, 8), summary: String(r.summary || ""), actions: arr(r.actions, 3), status: "done", error: "" });
+        done++;
+      }
+      upd();
+    }
+  } finally { B.running = false; B.note = B.stop ? "Analyse arrêtée." : ""; render(); }
 }
 async function addFromCapture() {
   const text = $("capText").value.trim(); let url = $("capUrl").value.trim(); const file = S.pendingFile;
@@ -303,15 +441,17 @@ async function addFromCapture() {
   try { await addItem({ text, url, file }); $("capText").value = ""; $("capUrl").value = ""; setAttach(null); }
   catch {} finally { $("capAdd").disabled = false; }
 }
-async function addItem({ text, url, file, example, type }) {
+async function addItem({ text, url, file, example, type, title, source, published, lang, queue }) {
   const id = "i-" + rid();
   let image = null; if (file && file.type.startsWith("image/")) { try { image = await thumb(file); } catch { toast("Image illisible."); } }
-  const item = { id, kind: "item", type: TYPES.includes(type) ? type : guessType(text, url, !!image), title: firstLine(text) || (url ? url.replace(/^https?:\/\/(www\.)?/, "").slice(0, 70) : "Image du " + fmtDate(Date.now())),
-    text: text || "", url: url || "", image, category: "", topics: [], keywords: [], summary: "", actions: [], extracted: "",
-    status: S.sample ? "pending" : "local", example: !!example, createdAt: Date.now() + Math.random() };
+  const item = { id, kind: "item", type: TYPES.includes(type) ? type : guessType(text, url, !!image),
+    title: clip(title || "", 120) || firstLine(text) || (url ? url.replace(/^https?:\/\/(www\.)?/, "").slice(0, 70) : (file ? file.name : "Image du " + fmtDate(Date.now()))),
+    text: clip(text || "", 60000), url: url || "", image, category: "", topics: [], keywords: [], summary: "", actions: [], extracted: "",
+    source: source || "", published: published || "", lang: lang || "",
+    status: S.sample ? (queue ? "queued" : "pending") : "local", example: !!example, createdAt: Date.now() + Math.random() };
   if (!S.sample) Object.assign(item, heuristic(item));
   await put(item);
-  if (S.sample) analyze(item, file && file.type.startsWith("image/") ? file : null);
+  if (S.sample && !queue) analyze(item, file && file.type.startsWith("image/") ? file : null);
   return item;
 }
 
@@ -320,7 +460,11 @@ function categories() { const m = new Map(); for (const it of S.items) { const c
 async function imageBlobFor(item, file) {
   if (file) return file;
   if (!item.image) return null;
-  try { return await (await fetch(item.image)).blob(); } catch { return null; }
+  try {
+    const [head, b64] = item.image.split(","); const bin = atob(b64); const u8 = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    return new Blob([u8], { type: (head.match(/data:([^;]+)/) || [])[1] || "image/jpeg" });
+  } catch { return null; }
 }
 async function analyze(item, file) {
   if (!S.sample) return;
@@ -450,7 +594,7 @@ function exportAll() {
     out += "\n## " + cat + "\n";
     for (const it of S.items.filter((x) => (x.category || "Non classé") === cat)) {
       out += `\n### N°${numOf(it)} · ${it.title}\n*${it.type}* · ${fmtDate(it.createdAt)}${(it.topics || []).length ? " · " + it.topics.join(", ") : ""}\n`;
-      if (it.url) out += "\nSource : " + it.url + "\n"; if (it.summary) out += "\n> " + it.summary + "\n";
+      if (it.url || it.source) out += "\nSource : " + [it.source, it.url].filter(Boolean).join(" · ") + "\n"; if (it.summary) out += "\n> " + it.summary + "\n";
       if (it.text) out += "\n" + it.text + "\n"; if (it.extracted) out += "\n_Image :_ " + it.extracted + "\n";
       if ((it.actions || []).length) out += "\nSuggestions :\n" + it.actions.map((a) => "- " + a).join("\n") + "\n";
     }
@@ -463,13 +607,16 @@ function exportAll() {
 function visibleItems() {
   const f = S.filter; const q = f.q.trim().toLowerCase();
   return S.items.filter((it) => (!f.cat || (it.category || "Non classé") === f.cat) && (!f.type || it.type === f.type) && (!f.topic || (it.topics || []).includes(f.topic))
-    && (!q || [it.title, it.text, it.summary, it.category, it.url, it.extracted, ...(it.topics || []), ...(it.keywords || [])].join(" ").toLowerCase().includes(q)));
+    && (!f.src || it.source === f.src)
+    && (!q || [it.title, it.text, it.summary, it.category, it.url, it.source, it.extracted, ...(it.topics || []), ...(it.keywords || [])].join(" ").toLowerCase().includes(q)));
 }
 function renderRail() {
   const cats = categories(); const f = S.filter;
   const types = {}; const topics = {};
   for (const it of S.items) { types[it.type] = (types[it.type] || 0) + 1; for (const t of it.topics || []) topics[t] = (topics[t] || 0) + 1; }
   const topT = Object.entries(topics).sort((a, b) => b[1] - a[1]).slice(0, 24);
+  const srcs = {}; for (const it of S.items) if (it.source) srcs[it.source] = (srcs[it.source] || 0) + 1;
+  const srcT = Object.entries(srcs).sort((a, b) => b[1] - a[1]).slice(0, 20);
   const mode = S.col ? "<b>Enregistré</b> dans votre espace privé : vous seul voyez ces fiches." : S.local ? "<b>Mode local</b> : les fiches restent dans ce navigateur." : "Connexion à votre espace…";
   const ai = S.sample ? "<b>Analyse Claude</b> active : classement, résumé, lecture d'images." : "Analyse Claude indisponible : classement par mots-clés.";
   $("rail").innerHTML = `
@@ -479,14 +626,16 @@ function renderRail() {
       ${cats.map(([c, n]) => `<button class="taxon" data-cat="${esc(c)}" aria-pressed="${f.cat === c}" style="--h:${hue(c)}"><span class="dot"></span><span class="lbl">${esc(c)}</span><span class="n">${n}</span></button>`).join("")}
     </div></div>
     <div><h3>Types</h3><div class="cloud">${TYPES.filter((t) => types[t]).map((t) => `<button class="chip" data-type="${t}" aria-pressed="${f.type === t}">${t} <span class="mono">${types[t]}</span></button>`).join("") || '<span class="muted" style="font-size:13px">Aucun pour l\'instant</span>'}</div></div>
+    ${srcT.length ? `<div class="rail-topics"><h3>Sources</h3><div class="cloud">${srcT.map(([t, n]) => `<button class="chip" data-src="${esc(t)}" aria-pressed="${f.src === t}">${esc(clip(t, 28))} <span class="mono">${n}</span></button>`).join("")}</div></div>` : ""}
     ${topT.length ? `<div class="rail-topics"><h3>Sujets</h3><div class="cloud">${topT.map(([t]) => `<button class="chip" data-topic="${esc(t)}" aria-pressed="${f.topic === t}">${esc(t)}</button>`).join("")}</div></div>` : ""}
     <div class="rail-note">${mode}<br>${ai}</div>`;
   $("rail").querySelectorAll("[data-cat]").forEach((b) => (b.onclick = () => { f.cat = b.dataset.cat || null; S.tab = "sheets"; render(); }));
   $("rail").querySelectorAll("[data-type]").forEach((b) => (b.onclick = () => { f.type = f.type === b.dataset.type ? null : b.dataset.type; S.tab = "sheets"; render(); }));
   $("rail").querySelectorAll("[data-topic]").forEach((b) => (b.onclick = () => { f.topic = f.topic === b.dataset.topic ? null : b.dataset.topic; S.tab = "sheets"; render(); }));
+  $("rail").querySelectorAll("[data-src]").forEach((b) => (b.onclick = () => { f.src = f.src === b.dataset.src ? null : b.dataset.src; S.tab = "sheets"; render(); }));
 }
 function sheetHTML(it) {
-  const st = it.status === "pending" ? '<span class="state"><span class="pulse"></span>analyse…</span>' : it.status === "error" ? '<span class="state" title="' + esc(it.error) + '">non analysée</span>' : "";
+  const st = it.status === "pending" ? '<span class="state"><span class="pulse"></span>analyse…</span>' : it.status === "queued" ? '<span class="state">en attente</span>' : it.status === "error" ? '<span class="state" title="' + esc(it.error) + '">non analysée</span>' : "";
   return `<button class="sheet" data-open="${it.id}">
     <div class="top"><span class="num">N°${numOf(it)}</span><span class="type">${esc(it.type)}</span>${it.example ? '<span class="chip">exemple</span>' : ""}${st}</div>
     ${it.image ? `<img class="thumb" src="${it.image}" alt="">` : ""}
@@ -505,7 +654,7 @@ function renderSheets(v) {
     const s = $("seed"); if (s) s.onclick = async () => { s.disabled = true; for (const e of EXAMPLES) await addItem({ ...e, example: true }); };
     return;
   }
-  const active = [f.cat && "catégorie « " + f.cat + " »", f.type && "type « " + f.type + " »", f.topic && "sujet « " + f.topic + " »", f.q && "recherche « " + f.q + " »"].filter(Boolean);
+  const active = [f.cat && "catégorie « " + f.cat + " »", f.type && "type « " + f.type + " »", f.topic && "sujet « " + f.topic + " »", f.src && "source « " + f.src + " »", f.q && "recherche « " + f.q + " »"].filter(Boolean);
   let html = active.length ? `<div class="banner">${items.length} fiche(s) · ${esc(active.join(", "))} <button class="btn sm" id="clearF" type="button">Tout afficher</button></div>` : "";
   if (!items.length) html += '<div class="empty"><p>Aucune fiche ne correspond.</p></div>';
   const groups = new Map(); for (const it of items) { const c = it.category || "Non classé"; if (!groups.has(c)) groups.set(c, []); groups.get(c).push(it); }
@@ -513,7 +662,7 @@ function renderSheets(v) {
   html += order.map((c) => `<section class="group"><div class="group-head" style="--h:${hue(c)}"><span class="dot"></span><h2>${esc(c)}</h2><span class="n">${groups.get(c).length} fiche(s)</span></div>
     <div class="grid">${groups.get(c).map(sheetHTML).join("")}</div></section>`).join("");
   v.innerHTML = `<div style="display:flex;flex-direction:column;gap:24px">${html}</div>`;
-  const cf = $("clearF"); if (cf) cf.onclick = () => { S.filter = { cat: null, type: null, topic: null, q: "" }; $("search").value = ""; render(); };
+  const cf = $("clearF"); if (cf) cf.onclick = () => { S.filter = { cat: null, type: null, topic: null, src: null, q: "" }; $("search").value = ""; render(); };
   v.querySelectorAll("[data-open]").forEach((b) => (b.onclick = () => { S.open = b.dataset.open; renderDrawer(); }));
 }
 function renderStudio(v) {
@@ -570,7 +719,7 @@ function renderDrawer() {
       <div class="field"><label for="dCat">Catégorie</label><input id="dCat" list="dCats" value="${esc(it.category || "Non classé")}"><datalist id="dCats">${cats.map((c) => `<option value="${esc(c)}">`).join("")}</datalist></div>
     </div>
     ${it.image ? `<img class="full" src="${it.image}" alt="">` : ""}
-    ${it.url ? `<div><span class="type">Source</span><br><a href="${esc(it.url)}" target="_blank" rel="noopener">${esc(it.url)}</a></div>` : ""}
+    ${it.url || it.source ? `<div><span class="type">Source</span><br>${it.source ? `<b>${esc(it.source)}</b>${it.published ? " · " + esc(fmtDate(it.published)) : ""}<br>` : ""}${it.url ? `<a href="${esc(it.url)}" target="_blank" rel="noopener">${esc(it.url)}</a>` : ""}</div>` : ""}
     ${it.summary ? `<div><span class="type">Résumé</span><p style="margin:4px 0 0">${esc(it.summary)}</p></div>` : ""}
     ${(it.topics || []).length ? `<div class="cloud">${it.topics.map((t) => `<span class="chip">${esc(t)}</span>`).join("")}${(it.keywords || []).filter((k) => !it.topics.includes(k)).map((k) => `<span class="chip" style="border-style:dashed">${esc(k)}</span>`).join("")}</div>` : ""}
     ${(it.actions || []).length ? `<div><span class="type">Suggestions</span><ul style="margin:4px 0 0;padding-left:1.2em">${it.actions.map((a) => `<li>${esc(a)}</li>`).join("")}</ul></div>` : ""}
@@ -593,8 +742,12 @@ function renderDrawer() {
 function render() {
   renderRail();
   $("tabSheets").setAttribute("aria-selected", S.tab === "sheets"); $("tabStudio").setAttribute("aria-selected", S.tab === "studio");
+  const nq = S.items.filter((i) => i.status === "queued").length; const rq = $("runQueue");
+  rq.hidden = !S.sample || (!nq && !S.batch.running);
+  rq.textContent = S.batch.running ? "Arrêter l'analyse" : "Analyser " + nq + " fiche(s) en attente";
   const b = $("banner");
-  if (S.loadNote && S.loaded && S.col) { b.hidden = false; b.textContent = S.loadNote; } else if (S.local && !S.items.length && S.loaded) { b.hidden = false; b.innerHTML = "<b>Mode local.</b> Ouvrez cette page connecté à claude.ai pour enregistrer vos fiches dans votre espace privé."; } else b.hidden = true;
+  if (S.batch.note) { b.hidden = false; b.textContent = S.batch.note; }
+  else if (S.loadNote && S.loaded && S.col) { b.hidden = false; b.textContent = S.loadNote; } else if (S.local && !S.items.length && S.loaded) { b.hidden = false; b.innerHTML = "<b>Mode local.</b> Ouvrez cette page connecté à claude.ai pour enregistrer vos fiches dans votre espace privé."; } else b.hidden = true;
   const v = $("view"); if (S.tab === "sheets") renderSheets(v); else renderStudio(v);
   if (S.open) { const it = S.items.find((x) => x.id === S.open); if (!it) { S.open = null; renderDrawer(); } }
 }
@@ -602,13 +755,15 @@ function render() {
 /* ---------- Wiring ---------- */
 $("capAdd").onclick = addFromCapture;
 $("capPick").onclick = () => $("capFile").click();
-$("capFile").onchange = (e) => { acceptFile(e.target.files[0]); e.target.value = ""; };
+$("capFile").onchange = (e) => { acceptFiles(e.target.files); e.target.value = ""; };
+$("capBulk").onclick = () => { if (!S.imp || !S.imp.busy) openImport([], ""); };
+$("runQueue").onclick = () => { if (S.batch.running) { S.batch.stop = true; $("runQueue").textContent = "Arrêt après ce lot…"; } else analyzeQueue(); };
 $("capText").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); addFromCapture(); } });
 $("capText").addEventListener("paste", (e) => { const f = [...(e.clipboardData?.files || [])].find((x) => x.type.startsWith("image/")); if (f) { e.preventDefault(); setAttach(f); } });
 const cap = $("capture");
 cap.addEventListener("dragover", (e) => { e.preventDefault(); cap.classList.add("drag"); });
 cap.addEventListener("dragleave", () => cap.classList.remove("drag"));
-cap.addEventListener("drop", (e) => { e.preventDefault(); cap.classList.remove("drag"); const f = e.dataTransfer.files[0]; if (f) acceptFile(f); else { const t = e.dataTransfer.getData("text/plain"); if (t) $("capText").value += t; } });
+cap.addEventListener("drop", (e) => { e.preventDefault(); cap.classList.remove("drag"); const f = e.dataTransfer.files; if (f && f.length) acceptFiles(f); else { const t = e.dataTransfer.getData("text/plain"); if (t) $("capText").value += t; } });
 $("tabSheets").onclick = () => { S.tab = "sheets"; render(); };
 $("tabStudio").onclick = () => { S.tab = "studio"; render(); };
 let qT; $("search").oninput = (e) => { clearTimeout(qT); qT = setTimeout(() => { S.filter.q = e.target.value; S.tab = "sheets"; render(); }, 150); };
