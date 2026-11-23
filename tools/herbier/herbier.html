@@ -1,0 +1,1246 @@
+<title>Herbier d'idées</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: herbarium cabinet. Left rail = taxonomy (categories, types, topics); main = capture strip + specimen sheets grouped by category; right drawer = one sheet in full. */
+:root {
+  --bg: #F1F4F1; --surface: #FFFFFF; --sunk: #E7ECE8; --ink: #17211B; --muted: #5B6A61; --line: #D5DDD7;
+  --accent: #1E5A44; --accent-ink: #FFFFFF; --accent-soft: #DCEBE3; --mark: #A86A0C; --danger: #A3352B;
+  --chip-l: 90%; --chip-ink: #1d2a22; --shadow: 0 1px 2px rgb(23 33 27 / .06), 0 6px 18px rgb(23 33 27 / .06);
+  --f-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body: "Instrument Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0F1411; --surface: #171E1A; --sunk: #121915; --ink: #E4EBE6; --muted: #91A198; --line: #29342D;
+  --accent: #74C6A0; --accent-ink: #0C1510; --accent-soft: #1E3329; --mark: #E3AA4E; --danger: #F08A7E;
+  --chip-l: 24%; --chip-ink: #E4EBE6; --shadow: 0 1px 2px rgb(0 0 0 / .3); color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0F1411; --surface: #171E1A; --sunk: #121915; --ink: #E4EBE6; --muted: #91A198; --line: #29342D;
+  --accent: #74C6A0; --accent-ink: #0C1510; --accent-soft: #1E3329; --mark: #E3AA4E; --danger: #F08A7E;
+  --chip-l: 24%; --chip-ink: #E4EBE6; --shadow: 0 1px 2px rgb(0 0 0 / .3); color-scheme: dark }
+
+* { box-sizing: border-box }
+[hidden] { display: none !important }
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--f-body); }
+button, input, select, textarea { font: inherit; color: inherit }
+button { cursor: pointer }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; margin: 0; line-height: 1.15 }
+.mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums }
+
+.app { max-width: 1400px; margin: 0 auto; padding-block: 20px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 28px }
+@media (max-width: 860px) { .app { grid-template-columns: minmax(0, 1fr); gap: 18px } }
+
+/* Rail */
+.rail { display: flex; flex-direction: column; gap: 22px; min-width: 0 }
+.brand h1 { font-size: 26px; font-weight: 700; letter-spacing: -.01em }
+.brand p { margin: 4px 0 0; color: var(--muted); font-size: 13px }
+.rail h3 { font: 600 11px/1 var(--f-body); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 8px }
+.taxa { display: flex; flex-direction: column; gap: 2px }
+.taxon { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border: 0; background: none; border-radius: 6px; text-align: left; font-size: 14px }
+.taxon:hover { background: var(--sunk) }
+.taxon[aria-pressed="true"] { background: var(--accent-soft); color: var(--ink); font-weight: 600 }
+.taxon .dot { width: 9px; height: 9px; border-radius: 50%; background: hsl(var(--h, 150) 45% 45%); flex: none }
+.taxon .n { margin-left: auto; color: var(--muted); font: 12px var(--f-mono) }
+.taxon .lbl { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.cloud { display: flex; flex-wrap: wrap; gap: 6px }
+@media (max-width: 860px) {
+  .taxa { flex-direction: row; flex-wrap: wrap; gap: 6px }
+  .taxon { width: auto; border: 1px solid var(--line) }
+  .rail-topics { display: none }
+}
+.rail-note { font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 12px }
+.rail-note b { color: var(--ink) }
+
+/* Chips & pills */
+.chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); white-space: nowrap }
+button.chip:hover { border-color: var(--accent); color: var(--ink) }
+.chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent) }
+.cat { background: hsl(var(--h, 150) 40% var(--chip-l)); color: var(--chip-ink); border-color: transparent; font-weight: 500 }
+.type { font: 600 10.5px/1 var(--f-body); text-transform: uppercase; letter-spacing: .07em; color: var(--muted) }
+
+/* Main */
+main { display: flex; flex-direction: column; gap: 20px; min-width: 0 }
+.capture { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px; box-shadow: var(--shadow) }
+.capture.drag { border-color: var(--accent); background: var(--accent-soft) }
+.capture textarea { width: 100%; min-height: 84px; resize: vertical; border: 0; background: transparent; outline: none; font-size: 15px }
+.capture textarea::placeholder { color: var(--muted) }
+.cap-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
+.cap-row input[type=url] { flex: 1 1 220px; min-width: 0; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg) }
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); font-weight: 500; font-size: 14px }
+.btn:hover { border-color: var(--accent) }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent) }
+.btn.primary:hover { filter: brightness(1.08) }
+.btn.danger { color: var(--danger) }
+.btn[disabled] { opacity: .5; cursor: not-allowed }
+.btn.sm { padding: 4px 10px; font-size: 13px }
+.attach { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted) }
+.attach img { width: 40px; height: 40px; object-fit: cover; border-radius: 6px }
+.hint { font-size: 12px; color: var(--muted); margin-left: auto }
+
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center }
+.tabs { display: flex; gap: 2px; background: var(--sunk); border-radius: 9px; padding: 3px }
+.tab { border: 0; background: none; padding: 6px 12px; border-radius: 7px; font-weight: 500; font-size: 14px; color: var(--muted) }
+.tab[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow) }
+.search { flex: 1 1 200px; min-width: 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface) }
+.banner { font-size: 13px; padding: 8px 12px; border-radius: 8px; background: var(--sunk); color: var(--muted) }
+.banner b { color: var(--ink) }
+
+/* Sheets */
+.group { display: flex; flex-direction: column; gap: 10px }
+.group-head { display: flex; align-items: baseline; gap: 10px; border-bottom: 1px solid var(--line); padding-bottom: 6px }
+.group-head h2 { font-size: 19px; font-weight: 600 }
+.group-head .n { font: 12px var(--f-mono); color: var(--muted) }
+.group-head .dot { width: 10px; height: 10px; border-radius: 50%; background: hsl(var(--h) 45% 45%); align-self: center }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px }
+.sheet { text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 7px; min-width: 0; position: relative }
+.sheet:hover { border-color: var(--accent) }
+.sheet .top { display: flex; align-items: center; gap: 8px }
+.sheet .num { font: 600 11px var(--f-mono); color: var(--mark) }
+.sheet h4 { margin: 0; font: 600 15.5px/1.3 var(--f-body); overflow-wrap: anywhere }
+.sheet p { margin: 0; font-size: 13.5px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere }
+.sheet .thumb { width: 100%; max-width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 6px; background: var(--sunk) }
+.sheet .tags { display: flex; flex-wrap: wrap; gap: 4px }
+.state { margin-left: auto; font-size: 11px; color: var(--muted); display: inline-flex; align-items: center; gap: 5px }
+.pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--mark); animation: pulse 1.1s ease-in-out infinite }
+@keyframes pulse { 50% { opacity: .25 } }
+@media (prefers-reduced-motion: reduce) { .pulse { animation: none } }
+
+.empty { border: 1px dashed var(--line); border-radius: 12px; padding: 28px 22px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start }
+.empty h2 { font-size: 20px }
+.empty p { margin: 0; color: var(--muted); max-width: 60ch }
+
+/* Synthesis studio */
+.studio { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px }
+.studio .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: end }
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1 1 180px }
+.field label { font: 600 11px var(--f-body); text-transform: uppercase; letter-spacing: .07em; color: var(--muted) }
+.field select, .field input, .field textarea { padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); min-width: 0; width: 100% }
+.modes { display: flex; flex-wrap: wrap; gap: 6px }
+.out { border-top: 1px solid var(--line); padding-top: 12px; min-height: 40px }
+.prose { max-width: 72ch; font-size: 15px; overflow-wrap: anywhere }
+.prose h1, .prose h2, .prose h3 { margin: 1.1em 0 .4em; font-size: 18px }
+.prose h1:first-child, .prose h2:first-child, .prose h3:first-child { margin-top: 0 }
+.prose ul, .prose ol { padding-left: 1.3em; margin: .4em 0 }
+.prose p { margin: .5em 0 }
+.prose li { margin: .2em 0 }
+.muted { color: var(--muted) }
+.synth-card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px }
+.synth-card header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
+.synth-card details summary { cursor: pointer; color: var(--accent); font-size: 13px; font-weight: 500 }
+.plan { display: flex; flex-direction: column; gap: 6px; font-size: 14px }
+.plan .mv { display: flex; flex-wrap: wrap; gap: 6px; align-items: center }
+
+/* Drawer */
+.scrim { position: fixed; inset: 0; background: rgb(0 0 0 / .32); z-index: 20 }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 100%); background: var(--surface); z-index: 21; overflow-y: auto; border-left: 1px solid var(--line);
+  padding: calc(20px + env(safe-area-inset-top, 0px)) max(20px, env(safe-area-inset-right, 0px)) calc(28px + env(safe-area-inset-bottom, 0px)) 20px; display: flex; flex-direction: column; gap: 14px }
+.drawer h2 { font-size: 22px; overflow-wrap: anywhere }
+.drawer .field { flex: none }
+.drawer img.full { width: 100%; border-radius: 8px }
+.drawer .body { white-space: pre-wrap; font-size: 14.5px; overflow-wrap: anywhere; background: var(--bg); border-radius: 8px; padding: 12px; max-height: 40vh; overflow-y: auto }
+.drawer .meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px }
+.drawer a { color: var(--accent); overflow-wrap: anywhere }
+.close { margin-left: auto }
+.tabs { flex-wrap: wrap }
+.stage { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; color: var(--ink); padding: 2px 8px; border-radius: 999px; background: hsl(var(--h) 45% var(--chip-l)); white-space: nowrap }
+.stage::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: hsl(var(--h) 55% 42%) }
+.seg { display: flex; flex-wrap: wrap; gap: 6px }
+.board { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-items: start }
+@media (max-width: 1100px) { .board { grid-template-columns: repeat(2, minmax(0, 1fr)) } }
+@media (max-width: 560px) { .board { grid-template-columns: minmax(0, 1fr) } }
+.col { background: var(--sunk); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; min-width: 0 }
+.col-head { display: flex; align-items: baseline; gap: 8px }
+.col-head h3 { font-size: 16px }
+.col-head .d { font-size: 12px; color: var(--muted) }
+.col-head .n { margin-left: auto; font: 12px var(--f-mono); color: var(--muted) }
+.mini { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; min-width: 0 }
+.mini .t { border: 0; background: none; padding: 0; text-align: left; font-weight: 600; font-size: 14px; overflow-wrap: anywhere }
+.mini .t:hover { color: var(--accent) }
+.mini .row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap }
+.mini .mv { margin-left: auto; display: flex; gap: 4px }
+.mv button { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 1px 8px; font-size: 13px }
+.mv button:hover { border-color: var(--accent) }
+.daily { background: var(--accent-soft); border: 1px solid transparent; border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px }
+.daily .eyebrow { font: 600 11px var(--f-body); text-transform: uppercase; letter-spacing: .08em; color: var(--accent) }
+.daily h3 { font-size: 18px; overflow-wrap: anywhere }
+.daily p { margin: 0; color: var(--muted); max-width: 70ch; overflow-wrap: anywhere }
+.chat { display: flex; flex-direction: column; gap: 12px }
+.msg { max-width: 760px; border-radius: 12px; padding: 10px 14px; min-width: 0; overflow-wrap: anywhere }
+.msg.user { align-self: flex-end; background: var(--accent); color: var(--accent-ink); white-space: pre-wrap }
+.msg.bot { align-self: flex-start; background: var(--surface); border: 1px solid var(--line) }
+.ref { border: 0; background: var(--accent-soft); color: var(--ink); border-radius: 5px; padding: 0 5px; font: 600 12.5px var(--f-mono); cursor: pointer }
+.ref:hover { background: var(--accent); color: var(--accent-ink) }
+.ask-box { display: flex; flex-direction: column; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px }
+.ask-box textarea { width: 100%; border: 0; background: transparent; resize: vertical; min-height: 52px; outline: none }
+.imp-list { max-height: 360px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--bg) }
+.imp-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; padding: 8px 10px; border-bottom: 1px solid var(--line); font-size: 13.5px; align-items: start }
+.imp-row:last-child { border-bottom: 0 }
+.imp-row .t { font-weight: 600; overflow-wrap: anywhere }
+.imp-row .s { color: var(--muted); font-size: 12px; overflow-wrap: anywhere }
+.imp-row.dup { opacity: .55 }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-size: 14px; z-index: 30; max-width: calc(100% - 32px) }
+</style>
+
+<div class="app">
+  <aside class="rail" id="rail"></aside>
+  <main>
+    <section class="capture" id="capture" aria-label="Ajouter un élément">
+      <textarea id="capText" placeholder="Collez une note, une idée, une citation, le texte d'un article, un lien… ou déposez / collez une image ici."></textarea>
+      <div class="cap-row">
+        <input type="url" id="capUrl" placeholder="Source (lien), facultatif">
+        <input type="file" id="capFile" accept="image/*,audio/*,.m4a,.ogg,.opus,.txt,.md,.markdown,.csv,.json,.xml,.rss,.atom,text/plain" multiple hidden>
+        <input type="file" id="capAudio" accept="audio/*" capture hidden>
+        <input type="file" id="capGallery" accept="image/*" multiple hidden>
+        <input type="file" id="capCamera" accept="image/*" capture="environment" hidden>
+      </div>
+      <div class="cap-row">
+        <button class="btn" id="capGal" type="button">Galerie photos</button>
+        <button class="btn" id="capCam" type="button">Appareil photo</button>
+        <button class="btn" id="capVoice" type="button">Mémo vocal</button>
+        <button class="btn" id="capPick" type="button">Fichiers</button>
+        <button class="btn" id="capMic" type="button" data-mic="capText" hidden>Dicter</button>
+        <button class="btn" id="capBulk" type="button">Import en lot</button>
+        <button class="btn" id="capConn" type="button">Drive, Gmail, Notion</button>
+        <button class="btn primary" id="capAdd" type="button">Ajouter à l'herbier</button>
+      </div>
+      <div class="cap-row">
+        <span class="attach" id="capAttach" hidden></span>
+        <span class="hint">Ctrl + Entrée pour ajouter · l'analyse se lance toute seule</span>
+      </div>
+    </section>
+    <section class="studio" id="connPanel" hidden aria-label="Importer depuis vos services"></section>
+    <section class="studio" id="importPanel" hidden aria-label="Import en lot"></section>
+
+    <div class="toolbar">
+      <div class="tabs" role="tablist">
+        <button class="tab" role="tab" id="tabSheets" aria-selected="true">Fiches</button>
+        <button class="tab" role="tab" id="tabCycle" aria-selected="false">Cycle des idées</button>
+        <button class="tab" role="tab" id="tabAsk" aria-selected="false">Demander</button>
+        <button class="tab" role="tab" id="tabStudio" aria-selected="false">Synthèses &amp; suggestions</button>
+      </div>
+      <input class="search" id="search" type="search" placeholder="Rechercher dans le titre, le texte, les sujets…">
+      <button class="btn sm primary" id="runQueue" type="button" hidden></button>
+      <button class="btn sm" id="reorg" type="button">Réorganiser les catégories</button>
+      <button class="btn sm" id="exportAll" type="button">Exporter (.md)</button>
+    </div>
+    <div id="banner" class="banner" hidden></div>
+    <div id="view"></div>
+  </main>
+</div>
+<div id="drawerRoot"></div>
+<div id="toast" class="toast" hidden></div>
+
+<script>
+(() => {
+const TYPES = ["note", "idée", "article", "citation", "tâche", "image", "référence", "question"];
+const MODES = {
+  synthese: { label: "Synthèse", ask: "Rédige une synthèse structurée : les grands thèmes, les idées clés de chaque thème, les points de convergence et de tension. Cite les fiches par leur numéro (N°…)." },
+  suggestions: { label: "Suggestions & pistes", ask: "Propose des suggestions : idées nouvelles qui découlent de ces éléments, sujets à creuser, questions ouvertes, lacunes dans la collecte et sources ou types de contenus à ajouter. Sois concret et cite les fiches (N°…) qui fondent chaque suggestion." },
+  actions: { label: "Plan d'action", ask: "Transforme ces éléments en plan d'action : tâches concrètes classées par priorité (haute / moyenne / basse), avec pour chacune la fiche d'origine (N°…) et une première étape réalisable." },
+  liens: { label: "Connexions", ask: "Identifie les liens non évidents entre les fiches : rapprochements, doublons, contradictions, idées qui se complètent. Pour chaque connexion, cite les fiches (N°…) et explique en une phrase ce qu'elle apporte." },
+  brief: { label: "Brief d'une page", ask: "Rédige un brief d'une page, prêt à partager : contexte, 5 points essentiels, 3 recommandations. Cite les fiches (N°…)." }
+};
+const EXAMPLES = [
+  { text: "Idée : un bot Telegram qui m'envoie chaque matin les 5 articles les plus importants de mes flux RSS, avec un résumé de 2 lignes chacun.", type: "idée" },
+  { text: "« La meilleure façon de prédire l'avenir, c'est de le créer. » Peter Drucker", type: "citation" },
+  { text: "Le Maroc accélère sur l'hydrogène vert : plusieurs projets annoncés dans la région de Guelmim-Oued Noun, avec des investissements étrangers importants et un objectif d'export vers l'Europe. Les enjeux : eau, foncier, raccordement au réseau.", url: "https://example.org/article-hydrogene-vert", type: "article" },
+  { text: "- [ ] Comparer PostgreSQL full-text et un index vectoriel pour la recherche dans les notes\n- [ ] Tester l'OCR sur des captures d'écran", type: "tâche" },
+  { text: "Question : comment mesurer la fiabilité d'une source d'information au fil du temps ? Taux de correction, délai de publication, recoupements…", type: "question" }
+];
+
+const STAGES = [
+  { k: "graine", label: "Graine", d: "idée brute", h: 95 },
+  { k: "pousse", label: "Pousse", d: "en réflexion", h: 150 },
+  { k: "fleur", label: "Fleur", d: "réalisée", h: 320 },
+  { k: "fanee", label: "Fanée", d: "abandonnée", h: 30 }
+];
+const stageOf = (it) => STAGES.find((s) => s.k === it.stage) || STAGES[0];
+const stageChip = (it) => { const s = stageOf(it); return `<span class="stage" style="--h:${s.h}" title="${esc(s.d)}">${s.label}</span>`; };
+const S = { items: [], inbox: [], synths: [], chunks: new Map(), assets: null, ask: { turns: [], running: false, ctl: null, live: "", draft: "", note: "" }, canTools: false, dayOffset: 0, filter: { cat: null, type: null, topic: null, src: null, q: "" }, tab: "sheets",
+  imp: null, batch: { running: false, stop: false, note: "" }, mcp: null, conn: null,
+  col: null, local: false, sample: null, canImg: false, downloads: null, open: null, pendingFile: null,
+  studio: { scope: "all", mode: "synthese", extra: "", running: false, text: "", ctl: null, scopeLabel: "" },
+  plan: null, planRunning: false, loaded: false, loadNote: "" };
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const rid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const hue = (s) => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) % 360; return h; };
+const clip = (s, n) => { s = String(s || ""); return s.length > n ? s.slice(0, n) + "…" : s; };
+const fmtDate = (t) => { try { return new Date(t).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" }); } catch { return ""; } };
+
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => (t.hidden = true), 2600); }
+function sampleErr(e) {
+  const c = e && e.code;
+  if (c === "not_granted" || c === "sampling_disabled") { S.sample = null; render(); return "L'accès à Claude n'est pas autorisé pour cette page. Le classement simple reste actif."; }
+  if (c === "rate_limited") return "Trop de demandes pour le moment. Réessayez dans un instant.";
+  if (c === "prompt_too_large") return "Trop de contenu d'un coup. Filtrez par catégorie pour réduire la sélection.";
+  if (c === "image_rejected") return "Cette image n'a pas pu être lue. Essayez un JPEG ou un PNG plus petit.";
+  if (c === "invalid_json") return "La réponse n'était pas au bon format. Réessayez.";
+  if (c === "cancelled") return "";
+  return "L'analyse a échoué (" + (c || "erreur") + "). Réessayez plus tard.";
+}
+
+/* ---------- Storage ---------- */
+const LS_KEY = "herbier-local-v1";
+function localLoad() { try { const d = JSON.parse(localStorage.getItem(LS_KEY) || "[]"); return Array.isArray(d) ? d : []; } catch { return []; } }
+function localSave() { try { localStorage.setItem(LS_KEY, JSON.stringify([...S.items, ...S.inbox, ...S.synths])); } catch { toast("Stockage local indisponible : les données seront perdues à la fermeture."); } }
+function ingest(docs) {
+  S.chunks = new Map(); for (const d of docs) if (d.kind === "audiochunk") { if (!S.chunks.has(d.owner)) S.chunks.set(d.owner, []); S.chunks.get(d.owner).push(d); }
+  const all = docs.filter((d) => d.kind === "item").sort((a, b) => b.createdAt - a.createdAt);
+  S.items = all.filter((d) => !d.inbox); S.inbox = all.filter((d) => d.inbox);
+  S.synths = docs.filter((d) => d.kind === "synth").sort((a, b) => b.createdAt - a.createdAt);
+}
+async function put(doc) {
+  if (S.col) { try { await S.col.doc(doc.id).set(doc); } catch (e) { toast(e.code === "quota_exceeded" ? "L'herbier est plein : supprimez des fiches pour en ajouter." : "Enregistrement impossible (" + e.code + ")."); throw e; } }
+  else { const arr = doc.kind === "synth" ? S.synths : S.items; const i = arr.findIndex((x) => x.id === doc.id); if (i >= 0) arr[i] = doc; else arr.unshift(doc); localSave(); render(); }
+}
+async function patch(id, data) {
+  if (S.col) { try { await S.col.doc(id).update(data); } catch (e) { toast("Mise à jour impossible (" + e.code + ")."); } }
+  else { const it = [...S.items, ...S.inbox, ...S.synths].find((x) => x.id === id); if (it) Object.assign(it, data); ingest([...S.items, ...S.inbox, ...S.synths]); localSave(); render(); }
+}
+async function remove(id) {
+  const it = [...S.items, ...S.inbox].find((x) => x.id === id);
+  if (it && it.audio) {
+    if (it.audio.asset && S.assets) S.assets.delete(it.audio.asset).catch(() => {});
+    if (it.audio.chunks && S.col) for (let i = 0; i < it.audio.chunks; i++) await S.col.doc(`a-${id}-${i}`).delete().catch(() => {});
+  }
+  if (S.col) { try { await S.col.doc(id).delete(); } catch (e) { toast("Suppression impossible (" + e.code + ")."); } }
+  else { S.items = S.items.filter((x) => x.id !== id); S.inbox = S.inbox.filter((x) => x.id !== id); S.synths = S.synths.filter((x) => x.id !== id); localSave(); render(); }
+}
+
+/* ---------- Heuristics (when Claude is unavailable) ---------- */
+const STOP = new Set("le la les un une des de du d l et ou en au aux à a pour par sur dans avec sans ce cet cette ces qui que quoi dont où est sont être été il elle ils elles on nous vous je tu me te se mon ma mes ton ta tes son sa ses leur leurs plus moins très pas ne n y the of and to in is for on with that this it as are be by from at an or ses comme mais donc car si tout tous toute toutes fait faire chaque deux entre aussi même comment quand alors avoir peut vers chez selon idée question".split(" "));
+function guessType(text, url, hasImg) {
+  const t = (text || "").trim();
+  if (hasImg && t.length < 40) return "image";
+  if (/^\s*[-*]\s*\[[ x]\]/im.test(t) || /^(todo|à faire|tâche)\b/i.test(t)) return "tâche";
+  if (/^[«"“]/.test(t)) return "citation";
+  if (/^(question|\?)/i.test(t) || /\?\s*$/.test(t.split("\n")[0])) return "question";
+  if (/^id[ée]e\b/i.test(t)) return "idée";
+  if (url || /^https?:\/\/\S+$/i.test(t)) return t.length > 400 ? "article" : "référence";
+  if (t.length > 700) return "article";
+  return t.length < 160 ? "idée" : "note";
+}
+function heuristic(item) {
+  const words = ((item.title || "") + " " + (item.text || "")).toLowerCase().normalize("NFC").match(/[\p{L}][\p{L}\p{N}'-]{3,}/gu) || [];
+  const freq = {}; for (const w of words) if (!STOP.has(w)) freq[w] = (freq[w] || 0) + 1;
+  const top = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([w]) => w);
+  return { topics: top.slice(0, 3), keywords: top, category: item.category || "Non classé", summary: item.summary || clip((item.text || "").replace(/\s+/g, " "), 180) };
+}
+function firstLine(t) { const l = (t || "").trim().split("\n").find((x) => x.trim()) || ""; return clip(l.replace(/^[-*#>\s\[\]x]+/, "").trim(), 80); }
+
+/* ---------- Images ---------- */
+function readAsDataURL(blob) { return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(blob); }); }
+async function thumb(file) {
+  const url = await readAsDataURL(file);
+  const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+  for (const [max, q] of [[900, .72], [700, .62], [520, .55], [380, .5]]) {
+    const k = Math.min(1, max / Math.max(img.width, img.height));
+    const c = document.createElement("canvas"); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+    const d = c.toDataURL("image/jpeg", q); if (d.length < 180000) return d;
+  }
+  return null;
+}
+
+/* ---------- Capture ---------- */
+function setAttach(file) {
+  S.pendingFile = file; const a = $("capAttach");
+  if (!file) { a.hidden = true; a.innerHTML = ""; return; }
+  a.hidden = false;
+  const isImg = file.type.startsWith("image/");
+  a.innerHTML = (isImg ? '<img alt="" id="capPrev">' : "") + "<span>" + esc(file.name || "image collée") + '</span> <button class="btn sm" type="button" id="capRm">Retirer</button>';
+  if (isImg) readAsDataURL(file).then((u) => { const p = $("capPrev"); if (p) p.src = u; });
+  $("capRm").onclick = () => setAttach(null);
+}
+const isImg = (f) => (f.type || "").startsWith("image/");
+const isStructured = (f) => /\.(json|xml|rss|atom)$/i.test(f.name || "") || /json|xml|rss|atom/.test(f.type || "");
+async function acceptFiles(list) {
+  const files = [...(list || [])]; if (!files.length) return;
+  if (files.length === 1 && isImg(files[0])) return setAttach(files[0]);
+  if (files.length === 1 && isAudio(files[0])) return addVoiceMemo(files[0]);
+  if (files.length === 1 && !isStructured(files[0])) {
+    const file = files[0]; if (file.size > 2e6) return toast("Fichier texte trop volumineux (2 Mo max).");
+    const txt = await file.text(); const ta = $("capText");
+    ta.value = (ta.value ? ta.value + "\n\n" : "") + txt; if (!$("capUrl").value) $("capUrl").placeholder = "Source : " + file.name;
+    return;
+  }
+  const entries = [];
+  for (const f of files) { try { entries.push(...(await parseFile(f))); } catch (e) { toast("« " + f.name + " » n'a pas pu être lu."); } }
+  openImport(entries, files.length === 1 ? files[0].name : files.length + " fichiers");
+}
+
+/* ---------- Bulk import ---------- */
+function htmlToText(s) {
+  if (!s) return ""; if (!/[<&]/.test(s)) return s.trim();
+  const d = new DOMParser().parseFromString(s, "text/html"); d.querySelectorAll("script,style").forEach((n) => n.remove());
+  return (d.body.textContent || "").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+function parseFeed(xml, fallbackName) {
+  const doc = new DOMParser().parseFromString(xml, "text/xml");
+  if (doc.querySelector("parsererror")) throw new Error("xml");
+  const kid = (el, names) => { for (const n of names) { const c = [...el.children].find((x) => x.localName === n || x.nodeName === n); if (c && c.textContent.trim()) return c; } return null; };
+  const chan = doc.querySelector("channel") || doc.documentElement;
+  const feedName = (kid(chan, ["title"])?.textContent || fallbackName || "Flux").trim();
+  return [...doc.querySelectorAll("item, entry")].map((it) => {
+    const linkEl = [...it.children].find((x) => x.localName === "link" && (!x.getAttribute("rel") || x.getAttribute("rel") === "alternate"));
+    const url = (linkEl && (linkEl.getAttribute("href") || linkEl.textContent) || kid(it, ["guid", "id"])?.textContent || "").trim();
+    const body = kid(it, ["encoded", "content", "description", "summary"])?.textContent || "";
+    return { title: htmlToText(kid(it, ["title"])?.textContent || "").slice(0, 200), text: htmlToText(body).slice(0, 20000), url: /^https?:/i.test(url) ? url : "",
+      source: feedName, published: (kid(it, ["pubDate", "published", "updated", "date"])?.textContent || "").trim(), type: "article" };
+  }).filter((e) => e.title || e.text);
+}
+async function parseFile(f) {
+  if (isImg(f)) return [{ file: f, title: f.name, text: "", type: "image" }];
+  if (isAudio(f)) return [{ file: f, title: memoTitle(f), text: "", type: "note", source: "Mémo vocal" }];
+  if (f.size > 15e6) throw new Error("size");
+  const txt = await f.text();
+  if (/\.json$/i.test(f.name) || /^\s*[\[{]/.test(txt) && /json/.test(f.type)) {
+    const j = JSON.parse(txt); const arr = Array.isArray(j) ? j : Array.isArray(j.items) ? j.items : [];
+    return arr.filter((x) => x && typeof x === "object").map((x) => ({ title: String(x.title || "").slice(0, 200), text: String(x.text || x.content || x.summary || ""), url: String(x.url || x.link || ""),
+      source: String(x.source || x.feed || ""), published: String(x.published || x.date || ""), lang: String(x.lang || ""), type: TYPES.includes(x.type) ? x.type : (x.url || x.link ? "article" : "") }))
+      .filter((e) => e.title || e.text);
+  }
+  if (/^\s*(<\?xml|<rss|<feed|<rdf)/i.test(txt)) return parseFeed(txt, f.name);
+  return [{ title: firstLine(txt) || f.name, text: txt.slice(0, 50000), source: f.name }];
+}
+function splitBlocks(t) { return t.split(/^\s*-{3,}\s*$/m).map((b) => b.trim()).filter(Boolean).map((b) => ({ title: firstLine(b), text: b, url: (b.match(/https?:\/\/\S+/) || [""])[0] })); }
+function openImport(entries, label) {
+  S.conn && (S.conn.open = false); renderConn();
+  const known = new Set(S.items.map((i) => i.url).filter(Boolean)); const seen = new Set();
+  for (const e of entries) { e.dup = !!(e.url && (known.has(e.url) || seen.has(e.url))); if (e.url) seen.add(e.url); e.sel = !e.dup; }
+  S.imp = { entries, label, mode: entries.length ? "review" : "paste", auto: entries.length <= 40, busy: false, progress: "" };
+  renderImport(); $("importPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+function renderImport() {
+  const p = $("importPanel"); const im = S.imp;
+  if (!im) { p.hidden = true; p.innerHTML = ""; return; }
+  p.hidden = false;
+  if (im.mode === "paste") {
+    p.innerHTML = `<div class="cap-row"><h3 style="font-size:17px">Import en lot</h3><button class="btn sm close" id="impX" type="button">Fermer</button></div>
+      <p class="muted" style="margin:0;font-size:13.5px">Collez plusieurs notes séparées par une ligne <span class="mono">---</span>, ou choisissez plusieurs fichiers : images, textes, flux RSS/Atom (.xml) ou fichier <span class="mono">herbier-import.json</span> produit par le script des flux SIO.</p>
+      <div class="field"><label for="impText">Notes</label><textarea id="impText" rows="7" placeholder="Première note…&#10;---&#10;Deuxième note…"></textarea></div>
+      <div class="cap-row"><button class="btn primary" id="impSplit" type="button">Prévisualiser</button><button class="btn" id="impFiles" type="button">Choisir des fichiers</button></div>`;
+    $("impSplit").onclick = () => { const v = $("impText").value.trim(); if (!v) return toast("Collez au moins une note."); openImport(splitBlocks(v), "notes collées"); };
+    $("impFiles").onclick = () => $("capFile").click();
+  } else {
+    const sel = im.entries.filter((e) => e.sel).length; const dups = im.entries.filter((e) => e.dup).length; const shown = im.entries.slice(0, 400);
+    p.innerHTML = `<div class="cap-row"><h3 style="font-size:17px">Importer depuis ${esc(im.label)}</h3><button class="btn sm close" id="impX" type="button">Fermer</button></div>
+      <div class="cap-row" style="font-size:13.5px"><span><b class="mono">${im.entries.length}</b> élément(s) trouvé(s)${dups ? ` · <b class="mono">${dups}</b> déjà dans l'herbier (décochés)` : ""}</span>
+        <button class="btn sm" id="impAll" type="button">Tout cocher</button><button class="btn sm" id="impNone" type="button">Tout décocher</button></div>
+      <div class="imp-list">${shown.map((e, i) => `<label class="imp-row${e.dup ? " dup" : ""}"><input type="checkbox" data-i="${i}"${e.sel ? " checked" : ""}${im.busy ? " disabled" : ""}>
+        <span><span class="t">${esc(e.title || clip(e.text, 80) || "(sans titre)")}</span><br><span class="s">${esc([e.source, e.published && fmtDate(e.published), e.dup && "déjà importé", e.url].filter(Boolean).join(" · "))}</span></span></label>`).join("")}
+        ${im.entries.length > shown.length ? `<div class="imp-row"><span></span><span class="s">Les ${im.entries.length - shown.length} suivants seront importés selon leur état.</span></div>` : ""}</div>
+      <label class="cap-row" style="font-size:13.5px"><input type="checkbox" id="impAuto"${im.auto && S.sample ? " checked" : ""}${S.sample ? "" : " disabled"}> Analyser avec Claude juste après l'import${S.sample ? "" : " (indisponible ici)"}</label>
+      <div class="cap-row"><button class="btn primary" id="impGo" type="button"${sel && !im.busy ? "" : " disabled"}>Importer ${sel} élément(s)</button><span class="muted" style="font-size:13px">${esc(im.progress)}</span></div>`;
+    p.querySelectorAll("[data-i]").forEach((c) => (c.onchange = () => { im.entries[+c.dataset.i].sel = c.checked; renderImport(); }));
+    $("impAll").onclick = () => { im.entries.forEach((e) => (e.sel = true)); renderImport(); };
+    $("impNone").onclick = () => { im.entries.forEach((e) => (e.sel = false)); renderImport(); };
+    $("impAuto").onchange = (e) => (im.auto = e.target.checked);
+    $("impGo").onclick = doImport;
+  }
+  $("impX").onclick = () => { if (!im.busy) { S.imp = null; renderImport(); } };
+}
+async function doImport() {
+  const im = S.imp; const todo = im.entries.filter((e) => e.sel); if (!todo.length) return;
+  im.busy = true; let n = 0;
+  for (const e of todo) {
+    im.progress = (e.load ? "Lecture et import " : "Import ") + (++n) + " / " + todo.length + "…"; renderImport();
+    if (e.load) { try { Object.assign(e, await e.load()); } catch (err) { toast("« " + clip(e.title, 40) + " » : " + connErr(err, e.source)); continue; } }
+    try { await addItem({ text: e.text || "", url: e.url, file: e.file, type: e.type, title: e.title, source: e.source, published: e.published, lang: e.lang, queue: true }); }
+    catch { im.progress = "Import interrompu à " + n + " / " + todo.length + "."; im.busy = false; renderImport(); return; }
+  }
+  const auto = im.auto && S.sample; S.imp = null; renderImport();
+  toast(todo.length + " fiche(s) importée(s).");
+  if (auto) analyzeQueue();
+}
+/* ---------- Connectors (Google Drive, Gmail, Notion) ---------- */
+const CONN = {
+  drive: { server: "Google Drive", label: "Google Drive", ph: "Mots à chercher dans vos documents (vide = derniers modifiés)" },
+  gmail: { server: "Gmail", label: "Gmail", ph: "Recherche Gmail, ex. : label:veille newer_than:7d", def: "in:inbox newer_than:7d" },
+  notion: { server: "Notion", label: "Notion", ph: "Mots à chercher dans vos pages Notion" }
+};
+function connErr(e, server) {
+  const s = server || "le service";
+  switch (e && e.code) {
+    case "server_not_connected": case "selection_required": return "Ajoutez ou choisissez " + s + " dans claude.ai, Réglages, Connecteurs.";
+    case "needs_reauth": return "Reconnectez " + s + " dans claude.ai, Réglages, Connecteurs.";
+    case "not_in_manifest": return "Accès à " + s + " refusé pour cette page. Vous pouvez le réautoriser dans le menu Autorisations de la page.";
+    case "approval_required": return "Cette lecture attend votre approbation. Relancez la recherche pour l'accorder.";
+    case "blocked_by_policy": return s + " est bloqué par votre organisation.";
+    case "server_unavailable": return s + " ne répond pas pour le moment. Réessayez dans un instant.";
+    case "tool_error": return s + " a refusé la demande : " + clip(e.message, 160);
+    default: return "Échec de la lecture (" + ((e && e.code) || "erreur") + ").";
+  }
+}
+const payloadOf = (r) => { let p = r && (r.payload ?? r); if (typeof p === "string") { try { p = JSON.parse(p); } catch {} } return p; };
+const notionText = (t) => String(t || "").replace(/^Here is the result[^\n]*\n/, "").replace(/<[^>]+>/g, "").replace(/\n{3,}/g, "\n\n").trim();
+async function connSearch() {
+  const c = S.conn; const def = CONN[c.src]; const q = ($("connQ").value || "").trim(); c.q = q;
+  c.busy = true; c.err = ""; c.results = []; renderConn();
+  try {
+    let entries = [];
+    if (c.src === "drive") {
+      const esc1 = q.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+      const query = "trashed = false and mimeType != 'application/vnd.google-apps.folder'" + (q ? ` and fullText contains '${esc1}'` : "");
+      const p = payloadOf(await S.mcp.callTool(def.server, "search_files", { query, pageSize: 25, snippetVerbosity: "BRIEF", ...(q ? {} : { orderBy: "modifiedTime desc" }) }));
+      entries = (p.files || []).map((f) => ({ title: f.title || "Sans titre", text: f.contentSnippet || "", url: f.viewUrl || "", source: "Google Drive", published: f.modifiedTime || "",
+        load: async () => { const r = payloadOf(await S.mcp.callTool(def.server, "read_file_content", { fileId: f.id })); return { text: String(r.fileContent || r.content || r.text || f.contentSnippet || "").slice(0, 60000) }; } }));
+    } else if (c.src === "gmail") {
+      const p = payloadOf(await S.mcp.callTool(def.server, "search_threads", { query: q || def.def, pageSize: 25, view: "THREAD_VIEW_SUMMARY" }));
+      entries = (p.threads || []).map((t) => { const m = (t.messages || [])[0] || {}; return { title: m.subject || "(sans objet)", text: htmlToText(m.snippet || ""), url: t.viewUrl || m.viewUrl || "",
+        source: "Gmail · " + (m.sender || ""), published: m.date || "", type: "note",
+        load: async () => { const r = payloadOf(await S.mcp.callTool(def.server, "get_thread", { threadId: t.id, messageFormat: "PLAIN_TEXT" }));
+          return { text: (r.messages || []).map((x) => `De : ${x.sender || ""} · ${x.date || ""}\nObjet : ${x.subject || ""}\n\n${x.plaintextBody || htmlToText(x.snippet || "")}`).join("\n\n---\n\n").slice(0, 60000) }; } }; });
+    } else {
+      const p = payloadOf(await S.mcp.callTool(def.server, "notion-search", { query: q || "notes", page_size: 25 }));
+      entries = (p.results || []).filter((r) => r.type !== "database" && r.type !== "data_source").map((r) => ({ title: r.title || "Sans titre", text: r.highlight || "", url: r.url || "", source: "Notion", published: r.timestamp || "",
+        load: async () => { const x = payloadOf(await S.mcp.callTool(def.server, "notion-fetch", { id: r.id })); return { text: notionText(x.text || x.content || "").slice(0, 60000) }; } }));
+    }
+    c.busy = false;
+    if (!entries.length) { c.err = "Aucun résultat."; renderConn(); return; }
+    openImport(entries, def.label + (q ? " · « " + q + " »" : ""));
+    S.imp.auto = entries.length <= 40; renderImport();
+  } catch (e) { c.busy = false; c.err = connErr(e, def.label); renderConn(); }
+}
+function renderConn() {
+  const p = $("connPanel"); const c = S.conn;
+  if (!c || !c.open) { p.hidden = true; p.innerHTML = ""; return; }
+  p.hidden = false;
+  if (!S.mcp) { p.innerHTML = `<div class="cap-row"><h3 style="font-size:17px">Importer depuis vos services</h3><button class="btn sm close" id="connX" type="button">Fermer</button></div>
+    <p class="muted" style="margin:0">Cette fonction marche quand la page est ouverte dans claude.ai avec vos connecteurs (Google Drive, Gmail, Notion) activés.</p>`; $("connX").onclick = () => { c.open = false; renderConn(); }; return; }
+  const def = CONN[c.src];
+  p.innerHTML = `<div class="cap-row"><h3 style="font-size:17px">Importer depuis vos services</h3><button class="btn sm close" id="connX" type="button">Fermer</button></div>
+    <div class="modes">${Object.entries(CONN).map(([k, v]) => `<button class="chip" data-src="${k}" aria-pressed="${c.src === k}">${v.label}</button>`).join("")}</div>
+    <div class="cap-row"><input class="search" id="connQ" placeholder="${esc(def.ph)}" value="${esc(c.q || "")}"><button class="btn primary" id="connGo" type="button"${c.busy ? " disabled" : ""}>${c.busy ? "Recherche…" : "Rechercher"}</button></div>
+    <p class="muted" style="margin:0;font-size:13px">Les résultats s'affichent dans l'aperçu d'import : cochez ce que vous voulez garder. Le contenu complet n'est lu qu'à l'import, et reste dans votre espace privé.</p>
+    ${c.err ? `<div class="banner">${esc(c.err)}</div>` : ""}`;
+  p.querySelectorAll("[data-src]").forEach((b) => (b.onclick = () => { c.src = b.dataset.src; c.q = ""; c.err = ""; renderConn(); }));
+  $("connGo").onclick = connSearch;
+  $("connQ").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); connSearch(); } };
+  $("connX").onclick = () => { c.open = false; renderConn(); };
+}
+
+const STARTED = Date.now();
+// An analysis left "pending" by a closed page before this load never finishes: count it as waiting.
+const isWaiting = (i) => i.status === "queued" || (i.status === "pending" && !S.batch.live?.has(i.id) && i.createdAt < STARTED - 120000);
+async function analyzeQueue() {
+  if (!S.sample || S.batch.running) return;
+  const B = S.batch; B.running = true; B.stop = false;
+  const queued = () => S.items.filter(isWaiting);
+  const total = queued().length; let done = 0;
+  const upd = () => { B.note = "Analyse en cours : " + done + " / " + total + " fiches."; render(); };
+  upd();
+  try {
+    while (!B.stop) {
+      const q = queued(); if (!q.length) break;
+      const imgs = q.filter((i) => i.image); const txt = q.filter((i) => !i.image).slice(0, 12);
+      if (!txt.length) { const it = imgs[0]; await patch(it.id, { status: "pending" }); await analyze(it, null); done++; upd(); continue; }
+      const cats = categories().map(([c]) => c).filter((c) => c !== "Non classé");
+      const prompt = `Tu es l'archiviste d'une base de connaissances personnelle. Classe chacune des fiches ci-dessous.
+Catégories déjà utilisées : ${cats.length ? cats.join(" ; ") : "(aucune)"}. Réutilise-les quand elles conviennent ; sinon crée des catégories larges et durables (1 à 3 mots, français, majuscule initiale), cohérentes entre les fiches de ce lot.
+Types possibles : ${TYPES.join(", ")}.
+Réponds uniquement avec un tableau JSON, un objet par fiche, dans cette forme :
+[{"id":"…","title":"titre court ≤ 70 caractères","type":"…","category":"…","topics":["2 à 5 sujets"],"keywords":["3 à 8"],"summary":"1 à 3 phrases","actions":["0 à 2 suggestions concrètes"]}]
+Rédige en français (garde les noms propres).
+
+${txt.map((i) => `### id=${i.id}\nSource : ${i.source || i.url || "—"}\nTitre : ${i.title}\n${clip(i.text, 2500)}`).join("\n\n")}`;
+      let res;
+      try { res = await S.sample.json(prompt, { modelTier: "quick" }); }
+      catch (e) { const m = sampleErr(e); if (m) toast(m); break; }
+      const byId = new Map((Array.isArray(res) ? res : []).filter((r) => r && r.id).map((r) => [String(r.id), r]));
+      const arr = (v, n) => (Array.isArray(v) ? v.map(String).map((s) => s.trim()).filter(Boolean).slice(0, n) : []);
+      for (const it of txt) {
+        const r = byId.get(it.id);
+        if (!r) { await patch(it.id, { ...heuristic(it), status: "error", error: "Non classée par le lot : utilisez « Ré-analyser »." }); }
+        else await patch(it.id, { title: clip(String(r.title || it.title), 90), type: TYPES.includes(r.type) ? r.type : it.type, category: clip(String(r.category || "Non classé"), 40),
+          topics: arr(r.topics, 5), keywords: arr(r.keywords, 8), summary: String(r.summary || ""), actions: arr(r.actions, 3), status: "done", error: "" });
+        done++;
+      }
+      upd();
+    }
+  } finally { B.running = false; B.note = B.stop ? "Analyse arrêtée." : ""; render(); }
+}
+async function addFromCapture() {
+  const text = $("capText").value.trim(); let url = $("capUrl").value.trim(); const file = S.pendingFile;
+  if (!text && !file && !url) { toast("Écrivez ou collez quelque chose d'abord."); return; }
+  if (!url && /^https?:\/\/\S+$/i.test(text)) url = text;
+  $("capAdd").disabled = true;
+  try { await addItem({ text, url, file }); $("capText").value = ""; $("capUrl").value = ""; setAttach(null); }
+  catch {} finally { $("capAdd").disabled = false; }
+}
+/* ---------- Voice memos ---------- */
+const isAudio = (f) => (f.type || "").startsWith("audio/") || /\.(m4a|aac|mp3|wav|ogg|opus|amr|3gp|weba)$/i.test(f.name || "");
+const fmtDur = (s) => { s = Math.round(s || 0); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
+function memoTitle(f) {
+  const d = new Date(f && f.lastModified ? f.lastModified : Date.now());
+  return "Mémo vocal du " + fmtDate(d) + " à " + d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+}
+function durationOf(file) {
+  return new Promise((res) => {
+    let u; try { u = URL.createObjectURL(file); } catch { return res(0); }
+    const a = new Audio(); const done = (v) => { try { URL.revokeObjectURL(u); } catch {} res(v); };
+    a.preload = "metadata"; a.onloadedmetadata = () => done(isFinite(a.duration) ? a.duration : 0); a.onerror = () => done(0);
+    setTimeout(() => done(0), 4000); a.src = u;
+  });
+}
+async function storeAudio(file, itemId) {
+  const ext = ((file.name || "").match(/\.(\w+)$/) || [])[1]?.toLowerCase() || "";
+  // Audio-only MP4/WebM/Ogg recordings are valid video/* containers, which the asset store accepts.
+  const asType = { m4a: "video/mp4", mp4: "video/mp4", webm: "video/webm", weba: "video/webm", ogg: "video/ogg", opus: "video/ogg", "3gp": "video/3gpp" }[ext]
+    || { "audio/mp4": "video/mp4", "audio/x-m4a": "video/mp4", "audio/m4a": "video/mp4", "audio/webm": "video/webm", "audio/ogg": "video/ogg", "audio/3gpp": "video/3gpp" }[file.type];
+  const meta = { name: file.name || "", mime: file.type || "", size: file.size, duration: await durationOf(file) };
+  if (S.assets && asType && file.size <= 20 * 1048576) {
+    try { const r = await S.assets.upload(file, { type: asType }); return { ...meta, asset: r.id }; } catch (e) { if (e && e.code === "quota_exceeded") throw new Error("Espace de stockage des fichiers plein."); }
+  }
+  if (file.size > 900000) throw new Error("Ce format de mémo n'est accepté que jusqu'à 900 Ko. Enregistrez en .m4a ou faites un mémo plus court.");
+  const data = await readAsDataURL(file);
+  if (!S.col) return { ...meta, data };
+  const parts = []; for (let i = 0; i < data.length; i += 200000) parts.push(data.slice(i, i + 200000));
+  for (let i = 0; i < parts.length; i++) await S.col.doc(`a-${itemId}-${i}`).set({ kind: "audiochunk", owner: itemId, i, n: parts.length, data: parts[i] });
+  return { ...meta, chunks: parts.length };
+}
+const AUDIO_URLS = new Map();
+function audioSrc(it) {
+  const a = it.audio; if (!a) return "";
+  if (a.asset) return "/_blob/" + a.asset;
+  if (a.data) return a.data;
+  const parts = (S.chunks.get(it.id) || []).slice().sort((x, y) => x.i - y.i);
+  if (parts.length < (a.chunks || 1)) return "";
+  if (AUDIO_URLS.has(it.id)) return AUDIO_URLS.get(it.id);
+  try {
+    const data = parts.map((p) => p.data).join(""); const [head, b64] = data.split(","); const bin = atob(b64); const u8 = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    const url = URL.createObjectURL(new Blob([u8], { type: (head.match(/data:([^;]+)/) || [])[1] || "audio/mp4" })); AUDIO_URLS.set(it.id, url); return url;
+  } catch { return ""; }
+}
+async function addVoiceMemo(file) {
+  toast("Enregistrement du mémo vocal…");
+  try { await addItem({ file, title: memoTitle(file), type: "note", source: "Mémo vocal" }); toast("Mémo vocal ajouté. Ouvrez la fiche pour l'écouter et noter ce qu'il dit."); }
+  catch (e) { toast(e && e.message ? e.message : "Le mémo n'a pas pu être enregistré."); }
+}
+
+async function addItem({ text, url, file, example, type, title, source, published, lang, queue }) {
+  const id = "i-" + rid();
+  if (file && isAudio(file)) {
+    const audio = await storeAudio(file, id);
+    const memo = { id, kind: "item", type: "note", title: clip(title || memoTitle(file), 120), text: "", url: "", image: null, audio,
+      category: "Mémos vocaux", topics: [], keywords: [], summary: "Mémo vocal de " + fmtDur(audio.duration) + ". Ajoutez ce qu'il dit pour que Claude l'analyse.", actions: [], extracted: "",
+      source: source || "Mémo vocal", published: "", lang: "", status: "done", stage: "graine", example: false, createdAt: Date.now() + Math.random() };
+    await put(memo); return memo;
+  }
+  let image = null; if (file && file.type.startsWith("image/")) { try { image = await thumb(file); } catch { toast("Image illisible."); } }
+  const item = { id, kind: "item", type: TYPES.includes(type) ? type : guessType(text, url, !!image),
+    title: clip(title || "", 120) || firstLine(text) || (url ? url.replace(/^https?:\/\/(www\.)?/, "").slice(0, 70) : (file ? file.name : "Image du " + fmtDate(Date.now()))),
+    text: clip(text || "", 60000), url: url || "", image, category: "", topics: [], keywords: [], summary: "", actions: [], extracted: "",
+    source: source || "", published: published || "", lang: lang || "",
+    status: S.sample ? (queue ? "queued" : "pending") : "local", example: !!example, createdAt: Date.now() + Math.random() };
+  if (!S.sample) Object.assign(item, heuristic(item));
+  await put(item);
+  if (S.sample && !queue) { (S.batch.live = S.batch.live || new Set()).add(id); analyze(item, file && file.type.startsWith("image/") ? file : null).finally(() => S.batch.live.delete(id)); }
+  return item;
+}
+
+/* ---------- Analysis with Claude ---------- */
+function categories() { const m = new Map(); for (const it of S.items) { const c = it.category || "Non classé"; m.set(c, (m.get(c) || 0) + 1); } return [...m.entries()].sort((a, b) => b[1] - a[1]); }
+async function imageBlobFor(item, file) {
+  if (file) return file;
+  if (!item.image) return null;
+  try {
+    const [head, b64] = item.image.split(","); const bin = atob(b64); const u8 = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    return new Blob([u8], { type: (head.match(/data:([^;]+)/) || [])[1] || "image/jpeg" });
+  } catch { return null; }
+}
+async function analyze(item, file) {
+  if (!S.sample) return;
+  const cats = categories().map(([c]) => c).filter((c) => c !== "Non classé");
+  const img = S.canImg ? await imageBlobFor(item, file) : null;
+  const prompt = `Tu es l'archiviste d'une base de connaissances personnelle (notes, idées, articles, images). Analyse l'élément ci-dessous et classe-le.
+Catégories déjà utilisées : ${cats.length ? cats.join(" ; ") : "(aucune pour l'instant)"}.
+Réutilise une catégorie existante si elle convient ; sinon crée-en une nouvelle, large et durable (1 à 3 mots, en français, majuscule initiale).
+Types possibles : ${TYPES.join(", ")}.
+${img ? "Une image est jointe : lis tout le texte visible et décris ce qu'elle montre." : ""}
+Réponds uniquement avec un objet JSON de cette forme :
+{"title":"titre court et parlant, 70 caractères max","type":"un des types","category":"catégorie","topics":["2 à 5 sujets précis"],"keywords":["3 à 8 mots-clés"],"summary":"résumé fidèle en 1 à 3 phrases","extracted":"${img ? "texte lu dans l'image puis description" : ""}","actions":["0 à 3 suggestions concrètes : que faire de cet élément, quoi creuser"]}
+Rédige en français, même si l'élément est dans une autre langue (garde les noms propres).
+
+ÉLÉMENT
+Source : ${item.url || "—"}
+Titre provisoire : ${item.title}
+Contenu :
+${clip(item.text, 9000) || "(pas de texte)"}`;
+  try {
+    const r = await S.sample.json(prompt, { modelTier: img ? "default" : "quick", ...(img ? { images: [img] } : {}) });
+    const pick = (v, d) => (typeof v === "string" && v.trim() ? v.trim() : d);
+    const arr = (v) => (Array.isArray(v) ? v.map(String).map((s) => s.trim()).filter(Boolean).slice(0, 8) : []);
+    await patch(item.id, { title: clip(pick(r.title, item.title), 90), type: TYPES.includes(r.type) ? r.type : item.type, category: clip(pick(r.category, "Non classé"), 40),
+      topics: arr(r.topics).slice(0, 5), keywords: arr(r.keywords), summary: pick(r.summary, ""), extracted: pick(r.extracted, ""), actions: arr(r.actions).slice(0, 3), status: "done", error: "" });
+  } catch (e) {
+    const msg = sampleErr(e);
+    await patch(item.id, { ...heuristic(item), status: "error", error: msg || "Analyse annulée." });
+  }
+}
+
+/* ---------- Reorganize ---------- */
+async function proposeReorg() {
+  if (!S.sample) { toast("La réorganisation demande l'accès à Claude."); return; }
+  if (S.items.length < 3) { toast("Ajoutez au moins 3 fiches pour réorganiser."); return; }
+  S.planRunning = true; S.plan = null; S.tab = "studio"; render();
+  const list = S.items.slice(0, 400).map((it) => `${it.id} | ${it.type} | ${it.category || "Non classé"} | ${clip(it.title, 80)} | ${clip(it.summary || it.text, 140).replace(/\s+/g, " ")}`).join("\n");
+  const prompt = `Voici les fiches d'une base de connaissances personnelle (id | type | catégorie actuelle | titre | résumé).
+Propose une taxonomie plus claire : entre 4 et 12 catégories larges, sans doublons ni quasi-synonymes, en français (1 à 3 mots).
+Affecte chaque fiche à une catégorie. Garde la catégorie actuelle quand elle est déjà bonne.
+Réponds uniquement avec un JSON : {"categories":[{"name":"...","description":"une phrase"}],"assign":{"<id>":"<catégorie>"},"notes":"2 phrases sur ce qui a changé"}
+
+${list}`;
+  try {
+    const r = await S.sample.json(prompt, { modelTier: "default", cache: false });
+    const assign = r && typeof r.assign === "object" ? r.assign : {};
+    const moves = S.items.filter((it) => typeof assign[it.id] === "string" && assign[it.id].trim() && assign[it.id].trim() !== (it.category || "Non classé"))
+      .map((it) => ({ id: it.id, from: it.category || "Non classé", to: clip(assign[it.id].trim(), 40), title: it.title }));
+    S.plan = { categories: Array.isArray(r.categories) ? r.categories : [], moves, notes: String(r.notes || "") };
+  } catch (e) { const m = sampleErr(e); if (m) toast(m); }
+  S.planRunning = false; render();
+}
+async function applyPlan() {
+  const plan = S.plan; if (!plan) return;
+  const btn = $("applyPlan"); if (btn) btn.disabled = true;
+  for (const mv of plan.moves) await patch(mv.id, { category: mv.to });
+  toast(plan.moves.length + " fiche(s) reclassée(s)."); S.plan = null; render();
+}
+
+/* ---------- Synthesis ---------- */
+function scopeItems(scope) {
+  if (scope === "all") return S.items;
+  if (scope === "filtered") return visibleItems();
+  const [k, v] = scope.split("::");
+  if (k === "cat") return S.items.filter((it) => (it.category || "Non classé") === v);
+  if (k === "type") return S.items.filter((it) => it.type === v);
+  if (k === "topic") return S.items.filter((it) => (it.topics || []).includes(v));
+  if (k === "stage") return S.items.filter((it) => stageOf(it).k === v);
+  return S.items;
+}
+function scopeLabel(scope) {
+  if (scope === "all") return "Tout l'herbier"; if (scope === "filtered") return "Sélection affichée";
+  const [k, v] = scope.split("::"); if (k === "stage") return "Stade : " + (STAGES.find((s) => s.k === v) || STAGES[0]).label;
+  return ({ cat: "Catégorie", type: "Type", topic: "Sujet" }[k] || "") + " : " + v;
+}
+function numOf(it) { const i = [...S.items].reverse().findIndex((x) => x.id === it.id); return String(i + 1).padStart(3, "0"); }
+async function runSynth() {
+  if (!S.sample) { toast("Les synthèses demandent l'accès à Claude."); return; }
+  const st = S.studio; const items = scopeItems(st.scope);
+  if (!items.length) { toast("Aucune fiche dans cette sélection."); return; }
+  let budget = 120000; const parts = [];
+  for (const it of items) {
+    const body = clip((it.summary ? "Résumé : " + it.summary + "\n" : "") + (it.text ? "Texte : " + it.text : "") + (it.extracted ? "\nImage : " + it.extracted : ""), 1400);
+    const p = `N°${numOf(it)} · ${it.type} · ${it.category || "Non classé"} · ${it.title}\nSujets : ${(it.topics || []).join(", ")}${it.url ? "\nSource : " + it.url : ""}\n${body}`;
+    if ((budget -= p.length) < 0) break; parts.push(p);
+  }
+  const prompt = `Tu aides une personne à exploiter sa collecte personnelle de notes, idées, articles et images.
+Tâche : ${MODES[st.mode].ask}
+${st.extra.trim() ? "Consigne supplémentaire de la personne : " + st.extra.trim() + "\n" : ""}Périmètre : ${scopeLabel(st.scope)} (${parts.length} fiche(s)${parts.length < items.length ? " sur " + items.length + ", les plus récentes" : ""}).
+Écris en français, en Markdown simple (titres ##, listes à puces, **gras**), sans préambule ni formule de politesse.
+
+FICHES
+${parts.join("\n\n---\n\n")}`;
+  st.ctl = new AbortController(); st.running = true; st.text = ""; st.scopeLabel = scopeLabel(st.scope) + " · " + parts.length + " fiche(s)"; render();
+  try {
+    const r = await S.sample(prompt, { modelTier: "default", cache: false, signal: st.ctl.signal, onText: ({ text }) => { st.text = text; const o = $("synthOut"); if (o) o.innerHTML = md(text); } });
+    st.text = r.text; if (r.truncated) toast("Réponse coupée : réduisez la sélection.");
+  } catch (e) { st.text = e.text || ""; const m = sampleErr(e); if (m) toast(m); }
+  st.running = false; render();
+}
+function md(src) {
+  const lines = esc(src).split("\n"); let html = ""; let list = null;
+  const inline = (s) => s.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/(^|[^*])\*(?!\s)(.+?)\*/g, "$1<em>$2</em>").replace(/`([^`]+)`/g, '<code class="mono">$1</code>');
+  const close = () => { if (list) { html += "</" + list + ">"; list = null; } };
+  for (const raw of lines) {
+    const l = raw.trimEnd(); let m;
+    if ((m = l.match(/^(#{1,4})\s+(.*)/))) { close(); html += `<h3>${inline(m[2])}</h3>`; }
+    else if ((m = l.match(/^\s*[-*•]\s+(.*)/))) { if (list !== "ul") { close(); html += "<ul>"; list = "ul"; } html += `<li>${inline(m[1])}</li>`; }
+    else if ((m = l.match(/^\s*\d+[.)]\s+(.*)/))) { if (list !== "ol") { close(); html += "<ol>"; list = "ol"; } html += `<li>${inline(m[1])}</li>`; }
+    else if (!l.trim()) close();
+    else { close(); html += `<p>${inline(l)}</p>`; }
+  }
+  close(); return html;
+}
+async function saveSynth() {
+  const st = S.studio; if (!st.text) return;
+  await put({ id: "s-" + rid(), kind: "synth", mode: st.mode, modeLabel: MODES[st.mode].label, scope: st.scopeLabel, extra: st.extra, content: st.text, createdAt: Date.now() });
+  toast("Synthèse enregistrée.");
+}
+async function download(filename, text) {
+  if (!S.downloads) { copy(text, "Téléchargement indisponible ici : contenu copié dans le presse-papiers."); return; }
+  try { await S.downloads.save({ filename, data: text }); } catch (e) { if (e && e.code !== "cancelled" && e.code !== "declined") toast("Téléchargement impossible."); }
+}
+function copy(text, ok = "Copié.") { navigator.clipboard?.writeText(text).then(() => toast(ok), () => toast("Copie refusée par le navigateur.")); }
+function exportAll() {
+  if (!S.items.length) { toast("Rien à exporter pour l'instant."); return; }
+  let out = "# Herbier d'idées\n\nExport du " + fmtDate(Date.now()) + " · " + S.items.length + " fiches\n";
+  for (const [cat] of categories()) {
+    out += "\n## " + cat + "\n";
+    for (const it of S.items.filter((x) => (x.category || "Non classé") === cat)) {
+      out += `\n### N°${numOf(it)} · ${it.title}\n*${it.type}* · ${stageOf(it).label} · ${fmtDate(it.createdAt)}${(it.topics || []).length ? " · " + it.topics.join(", ") : ""}\n`;
+      if (it.url || it.source) out += "\nSource : " + [it.source, it.url].filter(Boolean).join(" · ") + "\n"; if (it.summary) out += "\n> " + it.summary + "\n";
+      if (it.text) out += "\n" + it.text + "\n"; if (it.extracted) out += "\n_Image :_ " + it.extracted + "\n";
+      if ((it.actions || []).length) out += "\nSuggestions :\n" + it.actions.map((a) => "- " + a).join("\n") + "\n";
+    }
+  }
+  if (S.synths.length) { out += "\n## Synthèses enregistrées\n"; for (const s of S.synths) out += `\n### ${s.modeLabel} · ${s.scope} · ${fmtDate(s.createdAt)}\n\n${s.content}\n`; }
+  download("herbier-" + new Date().toISOString().slice(0, 10) + ".md", out);
+}
+
+/* ---------- Views ---------- */
+function visibleItems() {
+  const f = S.filter; const q = f.q.trim().toLowerCase();
+  return S.items.filter((it) => (!f.cat || (it.category || "Non classé") === f.cat) && (!f.type || it.type === f.type) && (!f.topic || (it.topics || []).includes(f.topic))
+    && (!f.src || it.source === f.src)
+    && (!q || [it.title, it.text, it.summary, it.category, it.url, it.source, it.extracted, ...(it.topics || []), ...(it.keywords || [])].join(" ").toLowerCase().includes(q)));
+}
+function renderRail() {
+  const cats = categories(); const f = S.filter;
+  const types = {}; const topics = {};
+  for (const it of S.items) { types[it.type] = (types[it.type] || 0) + 1; for (const t of it.topics || []) topics[t] = (topics[t] || 0) + 1; }
+  const topT = Object.entries(topics).sort((a, b) => b[1] - a[1]).slice(0, 24);
+  const srcs = {}; for (const it of S.items) if (it.source) srcs[it.source] = (srcs[it.source] || 0) + 1;
+  const srcT = Object.entries(srcs).sort((a, b) => b[1] - a[1]).slice(0, 20);
+  const mode = S.col ? "<b>Enregistré</b> dans votre espace privé : vous seul voyez ces fiches." : S.local ? "<b>Mode local</b> : les fiches restent dans ce navigateur." : "Connexion à votre espace…";
+  const ai = S.sample ? "<b>Analyse Claude</b> active : classement, résumé, lecture d'images." : "Analyse Claude indisponible : classement par mots-clés.";
+  $("rail").innerHTML = `
+    <div class="brand"><h1>Herbier d'idées</h1><p>Collecter, classer, faire pousser.</p></div>
+    <div><h3>Catégories</h3><div class="taxa">
+      <button class="taxon" data-cat="" aria-pressed="${!f.cat}"><span class="lbl">Toutes les fiches</span><span class="n">${S.items.length}</span></button>
+      ${cats.map(([c, n]) => `<button class="taxon" data-cat="${esc(c)}" aria-pressed="${f.cat === c}" style="--h:${hue(c)}"><span class="dot"></span><span class="lbl">${esc(c)}</span><span class="n">${n}</span></button>`).join("")}
+    </div></div>
+    <div><h3>Types</h3><div class="cloud">${TYPES.filter((t) => types[t]).map((t) => `<button class="chip" data-type="${t}" aria-pressed="${f.type === t}">${t} <span class="mono">${types[t]}</span></button>`).join("") || '<span class="muted" style="font-size:13px">Aucun pour l\'instant</span>'}</div></div>
+    ${srcT.length ? `<div class="rail-topics"><h3>Sources</h3><div class="cloud">${srcT.map(([t, n]) => `<button class="chip" data-src="${esc(t)}" aria-pressed="${f.src === t}">${esc(clip(t, 28))} <span class="mono">${n}</span></button>`).join("")}</div></div>` : ""}
+    ${topT.length ? `<div class="rail-topics"><h3>Sujets</h3><div class="cloud">${topT.map(([t]) => `<button class="chip" data-topic="${esc(t)}" aria-pressed="${f.topic === t}">${esc(t)}</button>`).join("")}</div></div>` : ""}
+    <div class="rail-note">${mode}<br>${ai}</div>`;
+  $("rail").querySelectorAll("[data-cat]").forEach((b) => (b.onclick = () => { f.cat = b.dataset.cat || null; S.tab = "sheets"; render(); }));
+  $("rail").querySelectorAll("[data-type]").forEach((b) => (b.onclick = () => { f.type = f.type === b.dataset.type ? null : b.dataset.type; S.tab = "sheets"; render(); }));
+  $("rail").querySelectorAll("[data-topic]").forEach((b) => (b.onclick = () => { f.topic = f.topic === b.dataset.topic ? null : b.dataset.topic; S.tab = "sheets"; render(); }));
+  $("rail").querySelectorAll("[data-src]").forEach((b) => (b.onclick = () => { f.src = f.src === b.dataset.src ? null : b.dataset.src; S.tab = "sheets"; render(); }));
+}
+function sheetHTML(it) {
+  const st = it.status === "pending" ? '<span class="state"><span class="pulse"></span>analyse…</span>' : it.status === "queued" ? '<span class="state">en attente</span>' : it.status === "error" ? '<span class="state" title="' + esc(it.error) + '">non analysée</span>' : "";
+  return `<button class="sheet" data-open="${it.id}">
+    <div class="top"><span class="num">N°${numOf(it)}</span><span class="type">${esc(it.type)}</span>${stageChip(it)}${it.example ? '<span class="chip">exemple</span>' : ""}${st}</div>
+    ${it.image ? `<img class="thumb" src="${it.image}" alt="">` : ""}
+    ${it.audio ? `<span class="chip" style="align-self:flex-start;border-color:var(--accent);color:var(--accent)">Mémo vocal · ${fmtDur(it.audio.duration)}</span>` : ""}
+    <h4>${esc(it.title)}</h4>
+    ${it.summary || it.text ? `<p>${esc(it.summary || it.text)}</p>` : ""}
+    <div class="tags">${(it.topics || []).slice(0, 4).map((t) => `<span class="chip">${esc(t)}</span>`).join("")}</div>
+  </button>`;
+}
+function renderSheets(v) {
+  const items = visibleItems(); const f = S.filter;
+  if (!S.items.length && !S.inbox.length) {
+    v.innerHTML = S.loaded ? `<div class="empty"><h2>L'herbier est vide</h2>
+      <p>Collez une note, un lien ou le texte d'un article, ou déposez une capture d'écran dans la zone ci-dessus. Chaque élément devient une fiche : titre, type, catégorie, sujets, résumé et suggestions sont proposés automatiquement.</p>
+      <button class="btn" id="seed" type="button">Charger 5 fiches d'exemple</button></div>`
+      : `<div class="empty"><h2>Ouverture de l'herbier…</h2><p>${esc(S.loadNote || "Chargement de vos fiches.")}</p></div>`;
+    const s = $("seed"); if (s) s.onclick = async () => { s.disabled = true; for (const e of EXAMPLES) await addItem({ ...e, example: true }); };
+    return;
+  }
+  const active = [f.cat && "catégorie « " + f.cat + " »", f.type && "type « " + f.type + " »", f.topic && "sujet « " + f.topic + " »", f.src && "source « " + f.src + " »", f.q && "recherche « " + f.q + " »"].filter(Boolean);
+  let html = active.length ? `<div class="banner">${items.length} fiche(s) · ${esc(active.join(", "))} <button class="btn sm" id="clearF" type="button">Tout afficher</button></div>` : inboxHTML() + dailyHTML();
+  if (!items.length) html += '<div class="empty"><p>Aucune fiche ne correspond.</p></div>';
+  const groups = new Map(); for (const it of items) { const c = it.category || "Non classé"; if (!groups.has(c)) groups.set(c, []); groups.get(c).push(it); }
+  const order = categories().map(([c]) => c).filter((c) => groups.has(c));
+  html += order.map((c) => `<section class="group"><div class="group-head" style="--h:${hue(c)}"><span class="dot"></span><h2>${esc(c)}</h2><span class="n">${groups.get(c).length} fiche(s)</span></div>
+    <div class="grid">${groups.get(c).map(sheetHTML).join("")}</div></section>`).join("");
+  v.innerHTML = `<div style="display:flex;flex-direction:column;gap:24px">${html}</div>`;
+  wireDaily(); wireInbox(v);
+  const cf = $("clearF"); if (cf) cf.onclick = () => { S.filter = { cat: null, type: null, topic: null, src: null, q: "" }; $("search").value = ""; render(); };
+  v.querySelectorAll("[data-open]").forEach((b) => (b.onclick = () => { S.open = b.dataset.open; renderDrawer(); }));
+}
+function renderStudio(v) {
+  const st = S.studio; const cats = categories(); const topics = [...new Set(S.items.flatMap((i) => i.topics || []))].slice(0, 60);
+  const opts = [["all", "Tout l'herbier (" + S.items.length + ")"], ["filtered", "Sélection affichée (" + visibleItems().length + ")"],
+    ...cats.map(([c, n]) => ["cat::" + c, "Catégorie : " + c + " (" + n + ")"]), ...TYPES.filter((t) => S.items.some((i) => i.type === t)).map((t) => ["type::" + t, "Type : " + t]),
+    ...STAGES.filter((s) => S.items.some((i) => stageOf(i).k === s.k)).map((s) => ["stage::" + s.k, "Stade : " + s.label + " (" + s.d + ")"]),
+    ...topics.map((t) => ["topic::" + t, "Sujet : " + t])];
+  const planHTML = S.planRunning ? '<div class="synth-card"><span class="state" style="margin:0"><span class="pulse"></span>Claude relit toutes les fiches pour proposer une taxonomie…</span></div>'
+    : S.plan ? `<div class="synth-card"><header><h3 style="font-size:17px">Proposition de réorganisation</h3></header>
+      ${S.plan.notes ? `<p class="muted" style="margin:0">${esc(S.plan.notes)}</p>` : ""}
+      <div class="cloud">${S.plan.categories.map((c) => `<span class="chip cat" style="--h:${hue(c.name)}" title="${esc(c.description)}">${esc(c.name)}</span>`).join("")}</div>
+      <div class="plan">${S.plan.moves.length ? S.plan.moves.slice(0, 60).map((m) => `<div class="mv"><span>${esc(clip(m.title, 60))}</span> <span class="chip">${esc(m.from)}</span> → <span class="chip cat" style="--h:${hue(m.to)}">${esc(m.to)}</span></div>`).join("") + (S.plan.moves.length > 60 ? `<span class="muted">… et ${S.plan.moves.length - 60} autres</span>` : "") : '<span class="muted">Le classement actuel est déjà cohérent : aucun déplacement proposé.</span>'}</div>
+      <div class="cap-row">${S.plan.moves.length ? `<button class="btn primary" id="applyPlan" type="button">Appliquer ${S.plan.moves.length} déplacement(s)</button>` : ""}<button class="btn" id="dropPlan" type="button">Ignorer</button></div></div>` : "";
+  v.innerHTML = `<div style="display:flex;flex-direction:column;gap:16px">
+    ${planHTML}
+    <section class="studio">
+      <div class="row">
+        <div class="field"><label for="scope">Sur quelles fiches</label><select id="scope">${opts.map(([k, l]) => `<option value="${esc(k)}"${k === st.scope ? " selected" : ""}>${esc(l)}</option>`).join("")}</select></div>
+        <div class="field" style="flex:2 1 260px"><label for="extra">Consigne (facultatif)</label><input id="extra" value="${esc(st.extra)}" placeholder="Ex. : orienté décisions pour mon projet SIO"></div>
+      </div>
+      <div class="modes">${Object.entries(MODES).map(([k, m]) => `<button class="chip" data-mode="${k}" aria-pressed="${st.mode === k}">${m.label}</button>`).join("")}</div>
+      <div class="cap-row">
+        ${st.running ? '<button class="btn" id="stopSynth" type="button">Arrêter</button>' : `<button class="btn primary" id="goSynth" type="button"${S.sample ? "" : " disabled"}>Générer</button>`}
+        ${!st.running && st.text ? '<button class="btn" id="saveSynth" type="button">Enregistrer</button><button class="btn" id="dlSynth" type="button">Télécharger .md</button><button class="btn" id="cpSynth" type="button">Copier</button>' : ""}
+        ${S.sample ? "" : '<span class="muted" style="font-size:13px">Disponible lorsque cette page peut utiliser Claude.</span>'}
+      </div>
+      <div class="out">${st.scopeLabel && (st.text || st.running) ? `<div class="type" style="margin-bottom:8px">${esc(MODES[st.mode].label)} · ${esc(st.scopeLabel)}</div>` : ""}
+        <div class="prose" id="synthOut">${st.text ? md(st.text) : st.running ? '<span class="state" style="margin:0"><span class="pulse"></span>Claude réfléchit…</span>' : '<span class="muted">Choisissez un périmètre et un type de résultat, puis « Générer ».</span>'}</div></div>
+    </section>
+    ${S.synths.length ? `<h2 style="font-size:19px">Synthèses enregistrées</h2>` + S.synths.map((s) => `<article class="synth-card"><header><span class="type">${esc(s.modeLabel)}</span><span class="chip">${esc(s.scope)}</span><span class="muted mono" style="font-size:12px">${fmtDate(s.createdAt)}</span>
+        <span style="margin-left:auto;display:flex;gap:6px"><button class="btn sm" data-dl="${s.id}" type="button">.md</button><button class="btn sm danger" data-del="${s.id}" type="button">Supprimer</button></span></header>
+        <details><summary>Lire</summary><div class="prose">${md(s.content)}</div></details></article>`).join("") : ""}
+  </div>`;
+  $("scope").onchange = (e) => (st.scope = e.target.value);
+  $("extra").oninput = (e) => (st.extra = e.target.value);
+  v.querySelectorAll("[data-mode]").forEach((b) => (b.onclick = () => { st.mode = b.dataset.mode; v.querySelectorAll("[data-mode]").forEach((x) => x.setAttribute("aria-pressed", x === b)); }));
+  const on = (id, fn) => { const el = $(id); if (el) el.onclick = fn; };
+  on("goSynth", runSynth); on("stopSynth", () => st.ctl?.abort()); on("saveSynth", saveSynth);
+  on("dlSynth", () => download("synthese-" + st.mode + ".md", st.text)); on("cpSynth", () => copy(st.text));
+  on("applyPlan", applyPlan); on("dropPlan", () => { S.plan = null; render(); });
+  v.querySelectorAll("[data-dl]").forEach((b) => (b.onclick = () => { const s = S.synths.find((x) => x.id === b.dataset.dl); if (s) download("synthese-" + fmtDate(s.createdAt).replace(/\s/g, "-") + ".md", s.content); }));
+  v.querySelectorAll("[data-del]").forEach((b) => (b.onclick = () => { if (b.dataset.armed) remove(b.dataset.del); else { b.dataset.armed = 1; b.textContent = "Confirmer ?"; } }));
+}
+function renderDrawer() {
+  const root = $("drawerRoot"); const it = S.items.find((x) => x.id === S.open);
+  if (!it) { root.innerHTML = ""; S.drawerFor = null; return; }
+  const prevNotes = $("dNotes"); const keep = prevNotes && S.drawerFor === it.id ? { v: prevNotes.value, f: document.activeElement === prevNotes, p: prevNotes.selectionStart } : null;
+  const au0 = $("dAudio");
+  if (au0 && S.drawerFor === it.id && au0.src && !au0.paused) return; // do not cut a memo that is playing
+  S.drawerFor = it.id;
+  const cats = categories().map(([c]) => c);
+  root.innerHTML = `<div class="scrim" id="scrim"></div><aside class="drawer" role="dialog" aria-label="Fiche">
+    <div class="cap-row"><span class="num mono" style="color:var(--mark);font-weight:600">N°${numOf(it)}</span><span class="muted mono" style="font-size:12px">${fmtDate(it.createdAt)}</span><button class="btn sm close" id="dClose" type="button">Fermer</button></div>
+    <h2>${esc(it.title)}</h2>
+    ${it.status === "error" ? `<div class="banner">${esc(it.error)}</div>` : ""}
+    <div class="field"><label>Stade de l'idée</label><div class="seg">${STAGES.map((s) => `<button class="chip" type="button" data-stage="${s.k}" aria-pressed="${stageOf(it).k === s.k}" title="${esc(s.d)}">${s.label}</button>`).join("")}</div></div>
+    <div class="meta">
+      <div class="field"><label for="dType">Type</label><select id="dType">${TYPES.map((t) => `<option${t === it.type ? " selected" : ""}>${t}</option>`).join("")}</select></div>
+      <div class="field"><label for="dCat">Catégorie</label><input id="dCat" list="dCats" value="${esc(it.category || "Non classé")}"><datalist id="dCats">${cats.map((c) => `<option value="${esc(c)}">`).join("")}</datalist></div>
+    </div>
+    ${it.image ? `<img class="full" src="${it.image}" alt="">` : ""}
+    ${it.audio ? `<div class="field"><label for="dAudio">Mémo vocal · ${fmtDur(it.audio.duration)}</label><audio id="dAudio" controls preload="metadata" style="width:100%"></audio>
+      <label for="dNotes" style="margin-top:8px">Ce que dit le mémo</label><textarea id="dNotes" rows="4" placeholder="Écoutez le mémo et notez l'essentiel, ou dictez-le avec le micro du clavier.">${esc(it.text)}</textarea>
+      <div class="cap-row"><button class="btn primary sm" id="dNotesSave" type="button">${S.sample ? "Enregistrer et analyser" : "Enregistrer"}</button></div></div>` : ""}
+    ${it.url || it.source ? `<div><span class="type">Source</span><br>${it.source ? `<b>${esc(it.source)}</b>${it.published ? " · " + esc(fmtDate(it.published)) : ""}<br>` : ""}${it.url ? `<a href="${esc(it.url)}" target="_blank" rel="noopener">${esc(it.url)}</a>` : ""}</div>` : ""}
+    ${it.summary ? `<div><span class="type">Résumé</span><p style="margin:4px 0 0">${esc(it.summary)}</p></div>` : ""}
+    ${(it.topics || []).length ? `<div class="cloud">${it.topics.map((t) => `<span class="chip">${esc(t)}</span>`).join("")}${(it.keywords || []).filter((k) => !it.topics.includes(k)).map((k) => `<span class="chip" style="border-style:dashed">${esc(k)}</span>`).join("")}</div>` : ""}
+    ${(it.actions || []).length ? `<div><span class="type">Suggestions</span><ul style="margin:4px 0 0;padding-left:1.2em">${it.actions.map((a) => `<li>${esc(a)}</li>`).join("")}</ul></div>` : ""}
+    ${relatedHTML(it)}
+    ${it.extracted ? `<div><span class="type">Lu dans l'image</span><div class="body">${esc(it.extracted)}</div></div>` : ""}
+    ${it.text ? `<div><span class="type">Contenu</span><div class="body">${esc(it.text)}</div></div>` : ""}
+    <div class="cap-row">
+      <button class="btn" id="dRe" type="button"${S.sample ? "" : " disabled"}>Ré-analyser</button>
+      <button class="btn" id="dSyn" type="button">Synthèse de sa catégorie</button>
+      <button class="btn danger" id="dDel" type="button" style="margin-left:auto">Supprimer</button>
+    </div></aside>`;
+  const close = () => { S.open = null; renderDrawer(); };
+  root.querySelectorAll("[data-rel]").forEach((b) => (b.onclick = () => { S.open = b.dataset.rel; renderDrawer(); }));
+  $("scrim").onclick = close; $("dClose").onclick = close;
+  $("dType").onchange = (e) => patch(it.id, { type: e.target.value });
+  $("drawerRoot").querySelectorAll("[data-stage]").forEach((b) => (b.onclick = () => setStage(it.id, b.dataset.stage)));
+  $("dCat").onchange = (e) => { const v = e.target.value.trim(); if (v) patch(it.id, { category: clip(v, 40) }); };
+  $("dRe").onclick = () => { patch(it.id, { status: "pending" }); analyze(it, null); close(); };
+  $("dSyn").onclick = () => { S.studio.scope = "cat::" + (it.category || "Non classé"); S.tab = "studio"; close(); render(); };
+  if (it.audio) {
+    const src = audioSrc(it); const au = $("dAudio");
+    if (keep) { const n = $("dNotes"); n.value = keep.v; if (keep.f) { n.focus(); n.setSelectionRange(keep.p, keep.p); } }
+    if (src) au.src = src; else au.insertAdjacentHTML("afterend", '<span class="muted" style="font-size:13px">Chargement du son…</span>');
+    $("dNotesSave").onclick = async () => {
+      const t = $("dNotes").value.trim(); if (!t) { toast("Écrivez d'abord ce que dit le mémo."); return; }
+      await patch(it.id, { text: t, summary: "" });
+      if (S.sample) { await patch(it.id, { status: "pending" }); analyze({ ...it, text: t, title: firstLine(t) || it.title }, null); toast("Analyse du mémo en cours."); } else toast("Notes enregistrées.");
+    };
+  }
+  const del = $("dDel"); del.onclick = () => { if (del.dataset.armed) { remove(it.id); close(); } else { del.dataset.armed = 1; del.textContent = "Confirmer la suppression"; } };
+  $("dClose").focus();
+}
+/* ---------- Inbox (automatic morning collection) ---------- */
+function inboxHTML() {
+  if (!S.inbox.length) return "";
+  const list = S.inbox.slice(0, 40);
+  return `<section class="studio" aria-label="Boîte de réception"><div class="cap-row"><h3 style="font-size:17px">Boîte de réception</h3><span class="muted" style="font-size:13px"><b class="mono">${S.inbox.length}</b> nouveauté(s) de la collecte automatique, déjà classée(s) par Claude</span>
+      <span style="margin-left:auto;display:flex;gap:6px"><button class="btn sm primary" id="inKeepAll" type="button">Tout garder</button><button class="btn sm danger" id="inDropAll" type="button">Tout jeter</button></span></div>
+    <div class="imp-list" style="max-height:none">${list.map((it) => `<div class="imp-row" style="grid-template-columns:minmax(0,1fr) auto"><span>
+      <span class="t">${esc(it.title)}</span>${(() => { const d = nearDup(it); return d ? ` <span class="chip" title="${esc(d.title)}" style="border-color:var(--mark);color:var(--mark)">proche de N°${numOf(d)}</span>` : ""; })()}<br><span class="s">${esc([it.source, it.published && fmtDate(it.published)].filter(Boolean).join(" · "))}</span>
+      ${it.summary ? `<br><span style="font-size:13px">${esc(clip(it.summary, 220))}</span>` : ""}
+      <br><span class="chip cat" style="--h:${hue(it.category || "Non classé")};margin-top:4px">${esc(it.category || "Non classé")}</span> ${it.url ? `<a href="${esc(it.url)}" target="_blank" rel="noopener" style="color:var(--accent);font-size:12.5px">Lire la source</a>` : ""}</span>
+      <span style="display:flex;flex-direction:column;gap:6px"><button class="btn sm primary" type="button" data-keep="${it.id}">Garder</button><button class="btn sm" type="button" data-drop="${it.id}">Jeter</button></span></div>`).join("")}</div>
+    ${S.inbox.length > list.length ? `<span class="muted" style="font-size:13px">${S.inbox.length - list.length} autre(s) après ce tri.</span>` : ""}</section>`;
+}
+function wireInbox(v) {
+  v.querySelectorAll("[data-keep]").forEach((b) => (b.onclick = () => { b.disabled = true; patch(b.dataset.keep, { inbox: false, keptAt: Date.now() }); }));
+  v.querySelectorAll("[data-drop]").forEach((b) => (b.onclick = () => { b.disabled = true; remove(b.dataset.drop); }));
+  const ka = $("inKeepAll"), da = $("inDropAll");
+  if (ka) ka.onclick = async () => { ka.disabled = true; const ids = S.inbox.slice(0, 40).map((i) => i.id); for (const id of ids) await patch(id, { inbox: false, keptAt: Date.now() }); toast(ids.length + " fiche(s) gardée(s)."); };
+  if (da) da.onclick = async () => { if (!da.dataset.armed) { da.dataset.armed = 1; da.textContent = "Confirmer ?"; return; } da.disabled = true; const ids = S.inbox.slice(0, 40).map((i) => i.id); for (const id of ids) await remove(id); toast(ids.length + " fiche(s) jetée(s)."); };
+}
+
+/* ---------- Related fiches & near-duplicates ---------- */
+const words = (s) => new Set((String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").match(/[\p{L}\p{N}]{4,}/gu) || []).filter((w) => !STOP.has(w)));
+function jaccard(a, b) { if (!a.size || !b.size) return 0; let n = 0; for (const w of a) if (b.has(w)) n++; return n / (a.size + b.size - n); }
+function related(it, n = 5) {
+  const tp = new Set((it.topics || []).map((t) => t.toLowerCase())), kw = new Set((it.keywords || []).map((t) => t.toLowerCase())), tw = words(it.title);
+  return S.items.filter((x) => x.id !== it.id).map((x) => {
+    let s = 0;
+    for (const t of x.topics || []) if (tp.has(t.toLowerCase())) s += 3;
+    for (const k of x.keywords || []) if (kw.has(k.toLowerCase())) s += 1;
+    if ((x.category || "") === (it.category || "") && it.category) s += 1;
+    s += Math.round(jaccard(tw, words(x.title)) * 6);
+    return [s, x];
+  }).filter(([s]) => s >= 3).sort((a, b) => b[0] - a[0]).slice(0, n).map(([, x]) => x);
+}
+function relatedHTML(it) {
+  const r = related(it); if (!r.length) return "";
+  return `<div><span class="type">Fiches liées</span><div style="display:flex;flex-direction:column;gap:4px;margin-top:4px">${r.map((x) => `<button class="taxon" type="button" data-rel="${x.id}" style="--h:${hue(x.category || "Non classé")}"><span class="num mono" style="color:var(--mark);font-size:11px;font-weight:600">N°${numOf(x)}</span><span class="lbl">${esc(x.title)}</span>${stageChip(x)}</button>`).join("")}</div></div>`;
+}
+function nearDup(it) {
+  const tw = words(it.title + " " + (it.summary || ""));
+  let best = null, bs = 0;
+  for (const x of S.items) { if (it.url && x.url === it.url) return x; const s = jaccard(tw, words(x.title + " " + (x.summary || ""))); if (s > bs) { bs = s; best = x; } }
+  return bs >= 0.35 ? best : null;
+}
+
+/* ---------- Voice dictation ---------- */
+const DICT = { d: null, target: null, off: false };
+const TOUCH = (() => { try { return matchMedia("(pointer: coarse)").matches; } catch { return false; } })();
+function micsRender() {
+  const on = !!DICT.d && !DICT.off; const active = on && DICT.d.active();
+  document.querySelectorAll("[data-mic]").forEach((b) => { b.hidden = !on && !TOUCH; b.textContent = active && DICT.target === b.dataset.mic ? "Arrêter la dictée" : "Dicter"; b.classList.toggle("primary", active && DICT.target === b.dataset.mic); });
+}
+function micClick(targetId) {
+  const d = DICT.d;
+  if (!d || DICT.off) {
+    const el = $(targetId); if (el && !el.disabled) { el.focus(); el.scrollIntoView({ block: "center", behavior: "smooth" }); }
+    toast("Touchez le micro de votre clavier pour dicter.");
+    return;
+  }
+  if (d.active()) { d.stop().catch(() => {}); return; }
+  DICT.target = targetId;
+  d.start().catch((e) => {
+    if (e.code === "not_granted" || e.code === "unavailable") { DICT.off = true; micsRender(); toast(e.code === "not_granted" ? "Micro refusé : la dictée est désactivée pour cette page." : "La dictée n'est pas disponible ici."); }
+    else if (e.code === "rate_limited") toast("Le micro est déjà utilisé. Réessayez dans un instant.");
+    else if (e.code !== "stopped" && e.code !== "dismissed") toast("La dictée a échoué (" + e.code + ").");
+  });
+  micsRender();
+}
+function initDictation(d) {
+  if (!d) { micsRender(); return; } DICT.d = d;
+  d.onPartial(({ text }) => { const t = $("toast"); t.textContent = "Écoute : " + text; t.hidden = false; clearTimeout(toast.t); });
+  d.onFinal(({ text }) => {
+    const el = $(DICT.target); if (!el || !text) return;
+    el.value = (el.value && !/\s$/.test(el.value) ? el.value + " " : el.value) + text.trim();
+    if (DICT.target === "askQ") S.ask.draft = el.value;
+    $("toast").hidden = true;
+  });
+  d.onState(({ state, reason }) => {
+    if (state === "idle") { $("toast").hidden = true; if (reason === "not_granted" || reason === "unavailable") DICT.off = true; if (reason === "rate_limited") toast("Le micro est déjà utilisé. Réessayez dans un instant."); if (reason === "upstream_error") toast("Le micro ou la reconnaissance vocale a échoué."); }
+    micsRender();
+  });
+  micsRender();
+}
+document.addEventListener("click", (e) => { const b = e.target.closest && e.target.closest("[data-mic]"); if (b) micClick(b.dataset.mic); });
+
+/* ---------- Idea life cycle ---------- */
+async function setStage(id, k) {
+  const it = S.items.find((x) => x.id === id); if (!it || stageOf(it).k === k) return;
+  await patch(id, { stage: k, stageAt: Date.now() });
+  toast("« " + clip(it.title, 40) + " » : " + (STAGES.find((s) => s.k === k) || STAGES[0]).label + ".");
+  if (S.open === id) renderDrawer();
+}
+function dailyPick() {
+  const pool = S.items.filter((i) => ["graine", "pousse"].includes(stageOf(i).k) && !i.example).sort((a, b) => (a.id < b.id ? -1 : 1));
+  const list = pool.length ? pool : S.items.filter((i) => ["graine", "pousse"].includes(stageOf(i).k));
+  if (!list.length) return null;
+  const day = new Date().toISOString().slice(0, 10);
+  return list[(hue(day + "herbier") * 7 + S.dayOffset) % list.length];
+}
+function dailyHTML() {
+  const it = dailyPick(); if (!it) return "";
+  const age = Math.max(0, Math.round((Date.now() - it.createdAt) / 864e5));
+  const next = stageOf(it).k === "graine" ? ["pousse", "Faire pousser"] : ["fleur", "Marquer réalisée"];
+  return `<section class="daily" aria-label="Fiche du jour"><span class="eyebrow">Fiche du jour · à redécouvrir</span>
+    <div class="row" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="num mono" style="color:var(--mark);font-weight:600;font-size:12px">N°${numOf(it)}</span>${stageChip(it)}<span class="muted mono" style="font-size:12px">collectée il y a ${age} jour${age > 1 ? "s" : ""}</span></div>
+    <h3>${esc(it.title)}</h3>${it.summary || it.text ? `<p>${esc(clip(it.summary || it.text, 260))}</p>` : ""}
+    ${(it.actions || []).length ? `<p><b>Piste :</b> ${esc(it.actions[0])}</p>` : ""}
+    <div class="cap-row"><button class="btn primary sm" id="dlyNext" type="button">${next[1]}</button><button class="btn sm" id="dlyOpen" type="button">Ouvrir</button>
+      <button class="btn sm" id="dlyAsk" type="button">Comment la développer ?</button><button class="btn sm" id="dlyFade" type="button">Laisser faner</button><button class="btn sm" id="dlyOther" type="button">Une autre</button></div></section>`;
+}
+function wireDaily() {
+  const it = dailyPick(); if (!it || !$("dlyNext")) return;
+  const next = stageOf(it).k === "graine" ? "pousse" : "fleur";
+  $("dlyNext").onclick = () => setStage(it.id, next);
+  $("dlyFade").onclick = () => setStage(it.id, "fanee");
+  $("dlyOpen").onclick = () => { S.open = it.id; renderDrawer(); };
+  $("dlyOther").onclick = () => { S.dayOffset++; render(); };
+  $("dlyAsk").onclick = () => { S.tab = "ask"; render(); askSend(`Comment développer l'idée N°${numOf(it)} « ${it.title} » ? Relie-la aux autres fiches qui peuvent l'enrichir et propose 3 prochaines étapes concrètes.`); };
+}
+function renderCycle(v) {
+  const items = visibleItems();
+  if (!S.items.length) { v.innerHTML = '<div class="empty"><h2>Aucune idée à faire pousser</h2><p>Ajoutez des fiches : elles commencent toutes au stade Graine, puis vous les faites avancer ici.</p></div>'; return; }
+  const cols = STAGES.map((s, i) => {
+    const list = items.filter((it) => stageOf(it).k === s.k); const shown = list.slice(0, 80);
+    return `<section class="col"><div class="col-head"><h3>${s.label}</h3><span class="d">${s.d}</span><span class="n">${list.length}</span></div>
+      ${shown.map((it) => `<div class="mini"><button class="t" type="button" data-open="${it.id}">${esc(clip(it.title, 90))}</button>
+        <div class="row"><span class="num mono" style="color:var(--mark);font-size:11px;font-weight:600">N°${numOf(it)}</span><span class="chip cat" style="--h:${hue(it.category || "Non classé")}">${esc(clip(it.category || "Non classé", 22))}</span>
+        <span class="mv">${i > 0 ? `<button type="button" data-to="${STAGES[i - 1].k}" data-id="${it.id}" aria-label="Revenir à ${STAGES[i - 1].label}" title="${STAGES[i - 1].label}">←</button>` : ""}${i < STAGES.length - 1 ? `<button type="button" data-to="${STAGES[i + 1].k}" data-id="${it.id}" aria-label="Passer à ${STAGES[i + 1].label}" title="${STAGES[i + 1].label}">→</button>` : ""}</span></div></div>`).join("")}
+      ${list.length > shown.length ? `<span class="muted" style="font-size:12px">… et ${list.length - shown.length} autres (filtrez par catégorie)</span>` : ""}
+      ${!list.length ? '<span class="muted" style="font-size:13px">Aucune fiche.</span>' : ""}</section>`;
+  }).join("");
+  const counts = STAGES.map((s) => S.items.filter((i) => stageOf(i).k === s.k).length);
+  const done = counts[2], total = S.items.length;
+  v.innerHTML = `<div style="display:flex;flex-direction:column;gap:14px">
+    <div class="banner">Faites avancer chaque idée avec les flèches. <b class="mono">${done}</b> sur <b class="mono">${total}</b> réalisée(s), <b class="mono">${counts[0]}</b> graine(s) en attente.${visibleItems().length !== total ? " Filtres de la colonne de gauche appliqués." : ""}</div>
+    <div class="board">${cols}</div></div>`;
+  v.querySelectorAll("[data-open]").forEach((b) => (b.onclick = () => { S.open = b.dataset.open; renderDrawer(); }));
+  v.querySelectorAll("[data-to]").forEach((b) => (b.onclick = () => setStage(b.dataset.id, b.dataset.to)));
+}
+
+/* ---------- Ask the herbier ---------- */
+const ASK_SUGGEST = ["Qu'ai-je collecté de plus important ce mois-ci ?", "Quelles idées n'ai-je jamais fait avancer ?", "Quels sujets reviennent le plus souvent ?", "Que me manque-t-il pour passer à l'action sur mes idées en cours ?"];
+function numMap() { const m = new Map(); [...S.items].reverse().forEach((it, i) => m.set(i + 1, it)); return m; }
+function linkRefs(html) {
+  const m = numMap();
+  return html.replace(/N°\s?0*(\d{1,5})/g, (all, n) => { const it = m.get(+n); return it ? `<button class="ref" type="button" data-ref="${it.id}" title="${esc(it.title)}">N°${String(n).padStart(3, "0")}</button>` : all; });
+}
+function ficheBrief(it) { return { num: "N°" + numOf(it), titre: it.title, type: it.type, categorie: it.category || "Non classé", stade: stageOf(it).label, sujets: it.topics || [], date: fmtDate(it.createdAt), resume: clip(it.summary || it.text, 220) }; }
+function askTools() {
+  return [
+    { name: "search_fiches", description: "Recherche plein texte dans toutes les fiches (titre, texte, résumé, texte lu dans les images, sujets, source). Renvoie jusqu'à 15 fiches résumées avec leur numéro.",
+      inputSchema: { type: "object", properties: { query: { type: "string", description: "mots à chercher" }, stade: { type: "string", enum: STAGES.map((s) => s.k) } }, required: ["query"] },
+      execute: (inp) => {
+        const words = String(inp.query || "").toLowerCase().split(/\s+/).filter((w) => w.length > 1);
+        const scored = S.items.filter((it) => !inp.stade || stageOf(it).k === inp.stade).map((it) => {
+          const hay = [it.title, it.text, it.summary, it.extracted, it.category, it.source, ...(it.topics || []), ...(it.keywords || [])].join(" ").toLowerCase();
+          return [words.reduce((n, w) => n + (hay.includes(w) ? 1 : 0), 0), it];
+        }).filter(([n]) => n > 0).sort((a, b) => b[0] - a[0]).slice(0, 15);
+        return scored.length ? scored.map(([, it]) => ficheBrief(it)) : "Aucune fiche ne contient ces mots.";
+      } },
+    { name: "get_fiche", description: "Lit une fiche en entier à partir de son numéro (ex. 12 ou \"N°012\"). Renvoie titre, stade, source, résumé, texte complet, texte lu dans l'image et suggestions.",
+      inputSchema: { type: "object", properties: { num: { type: "string" } }, required: ["num"] },
+      execute: (inp) => {
+        const it = numMap().get(parseInt(String(inp.num).replace(/\D/g, ""), 10)); if (!it) throw new Error("Fiche introuvable");
+        return { ...ficheBrief(it), source: [it.source, it.url].filter(Boolean).join(" · "), texte: clip(it.text, 6000), image: clip(it.extracted, 2000), suggestions: it.actions || [] };
+      } }
+  ];
+}
+async function askSend(q) {
+  const A = S.ask; q = String(q || "").trim(); if (!q || A.running) return;
+  if (!S.sample) { toast("Cette fonction demande l'accès à Claude."); return; }
+  if (!S.items.length) { toast("Ajoutez d'abord quelques fiches."); return; }
+  A.turns.push({ role: "user", content: q }); A.draft = ""; A.live = ""; A.running = true; A.ctl = new AbortController(); A.note = ""; render();
+  let budget = 70000; const idx = [];
+  for (const it of S.items) { const l = `N°${numOf(it)} | ${stageOf(it).label} | ${it.type} | ${it.category || "Non classé"} | ${fmtDate(it.createdAt)} | ${it.title} | ${(it.topics || []).join(", ")} | ${clip(it.summary || it.text, 160).replace(/\s+/g, " ")}`; if ((budget -= l.length) < 0) break; idx.push(l); }
+  const rules = `Tu es l'assistant de l'« Herbier d'idées », la base personnelle de notes, idées, articles et images de la personne qui te parle.
+Réponds en français, en t'appuyant d'abord sur ses fiches. Cite chaque fiche utilisée par son numéro au format N°012. Si l'herbier ne contient pas la réponse, dis-le clairement, puis donne ton avis en le signalant comme tel et suggère quoi collecter.
+Stades des idées : Graine (idée brute), Pousse (en réflexion), Fleur (réalisée), Fanée (abandonnée).
+${S.canTools ? "Outils : search_fiches pour chercher dans le texte complet, get_fiche pour lire une fiche en entier avant d'en citer des détails." : ""}
+Style : Markdown simple, concis, utile, sans préambule.
+
+INDEX DES FICHES (${idx.length}${idx.length < S.items.length ? " sur " + S.items.length + ", les plus récentes" : ""}) — numéro | stade | type | catégorie | date | titre | sujets | résumé
+${idx.join("\n")}`;
+  const turns = A.turns.slice(-10); while (turns.length && turns[0].role !== "user") turns.shift();
+  try {
+    const r = await S.sample([{ role: "user", content: rules }, ...turns], { cache: false, signal: A.ctl.signal, modelTier: "default", ...(S.canTools ? { tools: askTools() } : {}),
+      onText: ({ text }) => { A.live = text; const el = $("askLive"); if (el) { el.innerHTML = linkRefs(md(text)); wireRefs(el); } } });
+    A.turns.push({ role: "assistant", content: r.text }); if (r.truncated) A.note = "Réponse coupée : posez une question plus ciblée.";
+  } catch (e) {
+    if (e.text) A.turns.push({ role: "assistant", content: e.text + "\n\n*(réponse interrompue)*" });
+    const m = sampleErr(e); if (m) A.note = m;
+    if (e.code === "tools_unavailable") S.canTools = false;
+  }
+  A.running = false; A.live = ""; render();
+}
+function wireRefs(root) { root.querySelectorAll("[data-ref]").forEach((b) => (b.onclick = () => { S.open = b.dataset.ref; renderDrawer(); })); }
+function renderAsk(v) {
+  const A = S.ask;
+  const msgs = A.turns.map((t) => t.role === "user" ? `<div class="msg user">${esc(t.content)}</div>` : `<div class="msg bot prose">${linkRefs(md(t.content))}</div>`).join("");
+  v.innerHTML = `<div style="display:flex;flex-direction:column;gap:14px">
+    ${!A.turns.length ? `<div class="empty"><h2>Demander à l'herbier</h2><p>Posez une question sur ce que vous avez collecté. Claude cherche dans vos fiches, répond en citant leurs numéros, et chaque numéro ouvre la fiche.</p>
+      <div class="cloud">${ASK_SUGGEST.map((s, i) => `<button class="chip" type="button" data-sug="${i}">${esc(s)}</button>`).join("")}</div></div>` : ""}
+    <div class="chat">${msgs}${A.running ? `<div class="msg bot prose" id="askLive">${A.live ? linkRefs(md(A.live)) : '<span class="state" style="margin:0"><span class="pulse"></span>Claude cherche dans vos fiches…</span>'}</div>` : ""}</div>
+    ${A.note ? `<div class="banner">${esc(A.note)}</div>` : ""}
+    <div class="ask-box"><textarea id="askQ" placeholder="${S.sample ? "Votre question… (Entrée pour envoyer, Maj + Entrée pour aller à la ligne)" : "Disponible lorsque cette page peut utiliser Claude."}"${S.sample ? "" : " disabled"}>${esc(A.draft)}</textarea>
+      <div class="cap-row">${A.running ? '<button class="btn" id="askStop" type="button">Arrêter</button>' : `<button class="btn primary" id="askGo" type="button"${S.sample ? "" : " disabled"}>Envoyer</button>`}<button class="btn" type="button" data-mic="askQ" hidden>Dicter</button>
+        ${A.turns.length && !A.running ? '<button class="btn" id="askClear" type="button">Nouvelle conversation</button><button class="btn" id="askSave" type="button">Enregistrer la dernière réponse</button>' : ""}</div></div></div>`;
+  wireRefs(v);
+  v.querySelectorAll("[data-sug]").forEach((b) => (b.onclick = () => askSend(ASK_SUGGEST[+b.dataset.sug])));
+  const q = $("askQ"); q.oninput = () => (A.draft = q.value);
+  q.onkeydown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); askSend(q.value); } };
+  const on = (id, fn) => { const el = $(id); if (el) el.onclick = fn; };
+  micsRender();
+  on("askGo", () => askSend(q.value)); on("askStop", () => A.ctl?.abort());
+  on("askClear", () => { A.turns = []; A.note = ""; render(); });
+  on("askSave", async () => { const last = [...A.turns].reverse().find((t) => t.role === "assistant"); const qq = [...A.turns].reverse().find((t) => t.role === "user");
+    if (last) { await put({ id: "s-" + rid(), kind: "synth", mode: "question", modeLabel: "Question", scope: clip(qq ? qq.content : "", 80), content: last.content, createdAt: Date.now() }); toast("Réponse enregistrée dans Synthèses."); } });
+}
+
+function render() {
+  renderRail();
+  for (const [id, t] of [["tabSheets", "sheets"], ["tabCycle", "cycle"], ["tabAsk", "ask"], ["tabStudio", "studio"]]) $(id).setAttribute("aria-selected", S.tab === t);
+  const nq = S.items.filter(isWaiting).length; const rq = $("runQueue");
+  rq.hidden = !S.sample || (!nq && !S.batch.running);
+  rq.textContent = S.batch.running ? "Arrêter l'analyse" : "Analyser " + nq + " fiche(s) en attente";
+  const b = $("banner");
+  if (S.batch.note) { b.hidden = false; b.textContent = S.batch.note; }
+  else if (S.loadNote && S.loaded && S.col) { b.hidden = false; b.textContent = S.loadNote; } else if (S.local && !S.items.length && S.loaded) { b.hidden = false; b.innerHTML = "<b>Mode local.</b> Ouvrez cette page connecté à claude.ai pour enregistrer vos fiches dans votre espace privé."; } else b.hidden = true;
+  const v = $("view");
+  if (S.tab === "ask") {
+    const q = $("askQ"); const focused = q && document.activeElement === q; const pos = focused ? q.selectionStart : 0;
+    renderAsk(v); if (focused) { const n = $("askQ"); n.focus(); n.setSelectionRange(pos, pos); }
+  } else if (S.tab === "cycle") renderCycle(v); else if (S.tab === "sheets") renderSheets(v); else renderStudio(v);
+  if (S.open) { const it = S.items.find((x) => x.id === S.open); if (!it) { S.open = null; renderDrawer(); } }
+}
+
+/* ---------- Wiring ---------- */
+$("capAdd").onclick = addFromCapture;
+$("capPick").onclick = () => $("capFile").click();
+$("capFile").onchange = (e) => { acceptFiles(e.target.files); e.target.value = ""; };
+$("capBulk").onclick = () => { if (!S.imp || !S.imp.busy) openImport([], ""); };
+$("capGal").onclick = () => $("capGallery").click();
+$("capCam").onclick = () => $("capCamera").click();
+$("capGallery").onchange = (e) => { acceptFiles(e.target.files); e.target.value = ""; };
+$("capCamera").onchange = (e) => { acceptFiles(e.target.files); e.target.value = ""; };
+$("capVoice").onclick = () => $("capAudio").click();
+$("capAudio").onchange = (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) addVoiceMemo(f); };
+$("capConn").onclick = () => { if (S.imp && S.imp.busy) return; S.imp = null; renderImport(); S.conn = S.conn || { src: "drive", q: "", busy: false, err: "" }; S.conn.open = true; renderConn(); $("connPanel").scrollIntoView({ behavior: "smooth", block: "start" }); };
+$("runQueue").onclick = () => { if (S.batch.running) { S.batch.stop = true; $("runQueue").textContent = "Arrêt après ce lot…"; } else analyzeQueue(); };
+$("capText").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); addFromCapture(); } });
+$("capText").addEventListener("paste", (e) => { const f = [...(e.clipboardData?.files || [])].find((x) => x.type.startsWith("image/")); if (f) { e.preventDefault(); setAttach(f); } });
+const cap = $("capture");
+cap.addEventListener("dragover", (e) => { e.preventDefault(); cap.classList.add("drag"); });
+cap.addEventListener("dragleave", () => cap.classList.remove("drag"));
+cap.addEventListener("drop", (e) => { e.preventDefault(); cap.classList.remove("drag"); const f = e.dataTransfer.files; if (f && f.length) acceptFiles(f); else { const t = e.dataTransfer.getData("text/plain"); if (t) $("capText").value += t; } });
+$("tabSheets").onclick = () => { S.tab = "sheets"; render(); };
+$("tabStudio").onclick = () => { S.tab = "studio"; render(); };
+$("tabCycle").onclick = () => { S.tab = "cycle"; render(); };
+$("tabAsk").onclick = () => { S.tab = "ask"; render(); const q = $("askQ"); if (q && !q.disabled) q.focus(); };
+let qT; $("search").oninput = (e) => { clearTimeout(qT); qT = setTimeout(() => { S.filter.q = e.target.value; S.tab = "sheets"; render(); }, 150); };
+$("reorg").onclick = proposeReorg;
+$("exportAll").onclick = exportAll;
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && S.open) { S.open = null; renderDrawer(); } });
+
+function goLocal(note) { S.local = true; S.col = null; ingest(localLoad()); S.loaded = true; S.loadNote = note || ""; render(); }
+
+render();
+(async () => {
+  const use = (n) => (window.claude && window.claude.use ? window.claude.use(n).catch(() => null) : Promise.resolve(null));
+  const [db, user, sample, downloads, mcp, dictation, assets] = await Promise.all([use("db"), use("user"), use("sample"), use("downloads"), use("mcp"), use("dictation"), use("assets")]);
+  S.assets = assets;
+  initDictation(dictation);
+  S.sample = sample; S.downloads = downloads; S.mcp = mcp; if (S.conn && S.conn.open) renderConn();
+  if (sample) { try { const lim = await sample.limits(); S.canImg = !!lim.images; S.canTools = !!lim.tools; } catch { S.canImg = false; S.canTools = false; } }
+  let uid = null; if (user) { try { uid = await user.id(); } catch {} }
+  if (!db || !uid) return goLocal();
+  S.col = db.collection("data/users/" + uid);
+  S.loadNote = "Chargement de vos fiches…"; render();
+  const timer = setTimeout(() => { S.loadNote = "Vos fiches ne sont pas encore joignables. Elles s'afficheront dès que la connexion répond."; S.loaded = true; render(); }, 10000);
+  S.col.orderBy("createdAt", "desc").limit(1000).onSnapshot((snap) => {
+    if (!snap.metadata.fromCache) { clearTimeout(timer); S.loadNote = ""; }
+    ingest(snap.docs.map((d) => ({ ...d.data(), id: d.id }))); S.loaded = true; render(); if (S.open) renderDrawer();
+  }, (e) => { clearTimeout(timer); goLocal("Votre espace n'est plus accessible (" + e.code + ") : passage en mode local."); });
+})();
+})();
+</script>
