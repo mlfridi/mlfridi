@@ -140,11 +140,43 @@ main { display: flex; flex-direction: column; gap: 20px; min-width: 0 }
 .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 100%); background: var(--surface); z-index: 21; overflow-y: auto; border-left: 1px solid var(--line);
   padding: calc(20px + env(safe-area-inset-top, 0px)) max(20px, env(safe-area-inset-right, 0px)) calc(28px + env(safe-area-inset-bottom, 0px)) 20px; display: flex; flex-direction: column; gap: 14px }
 .drawer h2 { font-size: 22px; overflow-wrap: anywhere }
+.drawer .field { flex: none }
 .drawer img.full { width: 100%; border-radius: 8px }
 .drawer .body { white-space: pre-wrap; font-size: 14.5px; overflow-wrap: anywhere; background: var(--bg); border-radius: 8px; padding: 12px; max-height: 40vh; overflow-y: auto }
 .drawer .meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px }
 .drawer a { color: var(--accent); overflow-wrap: anywhere }
 .close { margin-left: auto }
+.tabs { flex-wrap: wrap }
+.stage { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; color: var(--ink); padding: 2px 8px; border-radius: 999px; background: hsl(var(--h) 45% var(--chip-l)); white-space: nowrap }
+.stage::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: hsl(var(--h) 55% 42%) }
+.seg { display: flex; flex-wrap: wrap; gap: 6px }
+.board { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-items: start }
+@media (max-width: 1100px) { .board { grid-template-columns: repeat(2, minmax(0, 1fr)) } }
+@media (max-width: 560px) { .board { grid-template-columns: minmax(0, 1fr) } }
+.col { background: var(--sunk); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; min-width: 0 }
+.col-head { display: flex; align-items: baseline; gap: 8px }
+.col-head h3 { font-size: 16px }
+.col-head .d { font-size: 12px; color: var(--muted) }
+.col-head .n { margin-left: auto; font: 12px var(--f-mono); color: var(--muted) }
+.mini { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; min-width: 0 }
+.mini .t { border: 0; background: none; padding: 0; text-align: left; font-weight: 600; font-size: 14px; overflow-wrap: anywhere }
+.mini .t:hover { color: var(--accent) }
+.mini .row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap }
+.mini .mv { margin-left: auto; display: flex; gap: 4px }
+.mv button { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 1px 8px; font-size: 13px }
+.mv button:hover { border-color: var(--accent) }
+.daily { background: var(--accent-soft); border: 1px solid transparent; border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px }
+.daily .eyebrow { font: 600 11px var(--f-body); text-transform: uppercase; letter-spacing: .08em; color: var(--accent) }
+.daily h3 { font-size: 18px; overflow-wrap: anywhere }
+.daily p { margin: 0; color: var(--muted); max-width: 70ch; overflow-wrap: anywhere }
+.chat { display: flex; flex-direction: column; gap: 12px }
+.msg { max-width: 760px; border-radius: 12px; padding: 10px 14px; min-width: 0; overflow-wrap: anywhere }
+.msg.user { align-self: flex-end; background: var(--accent); color: var(--accent-ink); white-space: pre-wrap }
+.msg.bot { align-self: flex-start; background: var(--surface); border: 1px solid var(--line) }
+.ref { border: 0; background: var(--accent-soft); color: var(--ink); border-radius: 5px; padding: 0 5px; font: 600 12.5px var(--f-mono); cursor: pointer }
+.ref:hover { background: var(--accent); color: var(--accent-ink) }
+.ask-box { display: flex; flex-direction: column; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px }
+.ask-box textarea { width: 100%; border: 0; background: transparent; resize: vertical; min-height: 52px; outline: none }
 .imp-list { max-height: 360px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--bg) }
 .imp-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; padding: 8px 10px; border-bottom: 1px solid var(--line); font-size: 13.5px; align-items: start }
 .imp-row:last-child { border-bottom: 0 }
@@ -184,6 +216,8 @@ main { display: flex; flex-direction: column; gap: 20px; min-width: 0 }
     <div class="toolbar">
       <div class="tabs" role="tablist">
         <button class="tab" role="tab" id="tabSheets" aria-selected="true">Fiches</button>
+        <button class="tab" role="tab" id="tabCycle" aria-selected="false">Cycle des idées</button>
+        <button class="tab" role="tab" id="tabAsk" aria-selected="false">Demander</button>
         <button class="tab" role="tab" id="tabStudio" aria-selected="false">Synthèses &amp; suggestions</button>
       </div>
       <input class="search" id="search" type="search" placeholder="Rechercher dans le titre, le texte, les sujets…">
@@ -216,7 +250,15 @@ const EXAMPLES = [
   { text: "Question : comment mesurer la fiabilité d'une source d'information au fil du temps ? Taux de correction, délai de publication, recoupements…", type: "question" }
 ];
 
-const S = { items: [], synths: [], filter: { cat: null, type: null, topic: null, src: null, q: "" }, tab: "sheets",
+const STAGES = [
+  { k: "graine", label: "Graine", d: "idée brute", h: 95 },
+  { k: "pousse", label: "Pousse", d: "en réflexion", h: 150 },
+  { k: "fleur", label: "Fleur", d: "réalisée", h: 320 },
+  { k: "fanee", label: "Fanée", d: "abandonnée", h: 30 }
+];
+const stageOf = (it) => STAGES.find((s) => s.k === it.stage) || STAGES[0];
+const stageChip = (it) => { const s = stageOf(it); return `<span class="stage" style="--h:${s.h}" title="${esc(s.d)}">${s.label}</span>`; };
+const S = { items: [], synths: [], ask: { turns: [], running: false, ctl: null, live: "", draft: "", note: "" }, canTools: false, dayOffset: 0, filter: { cat: null, type: null, topic: null, src: null, q: "" }, tab: "sheets",
   imp: null, batch: { running: false, stop: false, note: "" }, mcp: null, conn: null,
   col: null, local: false, sample: null, canImg: false, downloads: null, open: null, pendingFile: null,
   studio: { scope: "all", mode: "synthese", extra: "", running: false, text: "", ctl: null, scopeLabel: "" },
@@ -609,11 +651,13 @@ function scopeItems(scope) {
   if (k === "cat") return S.items.filter((it) => (it.category || "Non classé") === v);
   if (k === "type") return S.items.filter((it) => it.type === v);
   if (k === "topic") return S.items.filter((it) => (it.topics || []).includes(v));
+  if (k === "stage") return S.items.filter((it) => stageOf(it).k === v);
   return S.items;
 }
 function scopeLabel(scope) {
   if (scope === "all") return "Tout l'herbier"; if (scope === "filtered") return "Sélection affichée";
-  const [k, v] = scope.split("::"); return ({ cat: "Catégorie", type: "Type", topic: "Sujet" }[k] || "") + " : " + v;
+  const [k, v] = scope.split("::"); if (k === "stage") return "Stade : " + (STAGES.find((s) => s.k === v) || STAGES[0]).label;
+  return ({ cat: "Catégorie", type: "Type", topic: "Sujet" }[k] || "") + " : " + v;
 }
 function numOf(it) { const i = [...S.items].reverse().findIndex((x) => x.id === it.id); return String(i + 1).padStart(3, "0"); }
 async function runSynth() {
@@ -670,7 +714,7 @@ function exportAll() {
   for (const [cat] of categories()) {
     out += "\n## " + cat + "\n";
     for (const it of S.items.filter((x) => (x.category || "Non classé") === cat)) {
-      out += `\n### N°${numOf(it)} · ${it.title}\n*${it.type}* · ${fmtDate(it.createdAt)}${(it.topics || []).length ? " · " + it.topics.join(", ") : ""}\n`;
+      out += `\n### N°${numOf(it)} · ${it.title}\n*${it.type}* · ${stageOf(it).label} · ${fmtDate(it.createdAt)}${(it.topics || []).length ? " · " + it.topics.join(", ") : ""}\n`;
       if (it.url || it.source) out += "\nSource : " + [it.source, it.url].filter(Boolean).join(" · ") + "\n"; if (it.summary) out += "\n> " + it.summary + "\n";
       if (it.text) out += "\n" + it.text + "\n"; if (it.extracted) out += "\n_Image :_ " + it.extracted + "\n";
       if ((it.actions || []).length) out += "\nSuggestions :\n" + it.actions.map((a) => "- " + a).join("\n") + "\n";
@@ -714,7 +758,7 @@ function renderRail() {
 function sheetHTML(it) {
   const st = it.status === "pending" ? '<span class="state"><span class="pulse"></span>analyse…</span>' : it.status === "queued" ? '<span class="state">en attente</span>' : it.status === "error" ? '<span class="state" title="' + esc(it.error) + '">non analysée</span>' : "";
   return `<button class="sheet" data-open="${it.id}">
-    <div class="top"><span class="num">N°${numOf(it)}</span><span class="type">${esc(it.type)}</span>${it.example ? '<span class="chip">exemple</span>' : ""}${st}</div>
+    <div class="top"><span class="num">N°${numOf(it)}</span><span class="type">${esc(it.type)}</span>${stageChip(it)}${it.example ? '<span class="chip">exemple</span>' : ""}${st}</div>
     ${it.image ? `<img class="thumb" src="${it.image}" alt="">` : ""}
     <h4>${esc(it.title)}</h4>
     ${it.summary || it.text ? `<p>${esc(it.summary || it.text)}</p>` : ""}
@@ -732,13 +776,14 @@ function renderSheets(v) {
     return;
   }
   const active = [f.cat && "catégorie « " + f.cat + " »", f.type && "type « " + f.type + " »", f.topic && "sujet « " + f.topic + " »", f.src && "source « " + f.src + " »", f.q && "recherche « " + f.q + " »"].filter(Boolean);
-  let html = active.length ? `<div class="banner">${items.length} fiche(s) · ${esc(active.join(", "))} <button class="btn sm" id="clearF" type="button">Tout afficher</button></div>` : "";
+  let html = active.length ? `<div class="banner">${items.length} fiche(s) · ${esc(active.join(", "))} <button class="btn sm" id="clearF" type="button">Tout afficher</button></div>` : dailyHTML();
   if (!items.length) html += '<div class="empty"><p>Aucune fiche ne correspond.</p></div>';
   const groups = new Map(); for (const it of items) { const c = it.category || "Non classé"; if (!groups.has(c)) groups.set(c, []); groups.get(c).push(it); }
   const order = categories().map(([c]) => c).filter((c) => groups.has(c));
   html += order.map((c) => `<section class="group"><div class="group-head" style="--h:${hue(c)}"><span class="dot"></span><h2>${esc(c)}</h2><span class="n">${groups.get(c).length} fiche(s)</span></div>
     <div class="grid">${groups.get(c).map(sheetHTML).join("")}</div></section>`).join("");
   v.innerHTML = `<div style="display:flex;flex-direction:column;gap:24px">${html}</div>`;
+  wireDaily();
   const cf = $("clearF"); if (cf) cf.onclick = () => { S.filter = { cat: null, type: null, topic: null, src: null, q: "" }; $("search").value = ""; render(); };
   v.querySelectorAll("[data-open]").forEach((b) => (b.onclick = () => { S.open = b.dataset.open; renderDrawer(); }));
 }
@@ -746,6 +791,7 @@ function renderStudio(v) {
   const st = S.studio; const cats = categories(); const topics = [...new Set(S.items.flatMap((i) => i.topics || []))].slice(0, 60);
   const opts = [["all", "Tout l'herbier (" + S.items.length + ")"], ["filtered", "Sélection affichée (" + visibleItems().length + ")"],
     ...cats.map(([c, n]) => ["cat::" + c, "Catégorie : " + c + " (" + n + ")"]), ...TYPES.filter((t) => S.items.some((i) => i.type === t)).map((t) => ["type::" + t, "Type : " + t]),
+    ...STAGES.filter((s) => S.items.some((i) => stageOf(i).k === s.k)).map((s) => ["stage::" + s.k, "Stade : " + s.label + " (" + s.d + ")"]),
     ...topics.map((t) => ["topic::" + t, "Sujet : " + t])];
   const planHTML = S.planRunning ? '<div class="synth-card"><span class="state" style="margin:0"><span class="pulse"></span>Claude relit toutes les fiches pour proposer une taxonomie…</span></div>'
     : S.plan ? `<div class="synth-card"><header><h3 style="font-size:17px">Proposition de réorganisation</h3></header>
@@ -791,6 +837,7 @@ function renderDrawer() {
     <div class="cap-row"><span class="num mono" style="color:var(--mark);font-weight:600">N°${numOf(it)}</span><span class="muted mono" style="font-size:12px">${fmtDate(it.createdAt)}</span><button class="btn sm close" id="dClose" type="button">Fermer</button></div>
     <h2>${esc(it.title)}</h2>
     ${it.status === "error" ? `<div class="banner">${esc(it.error)}</div>` : ""}
+    <div class="field"><label>Stade de l'idée</label><div class="seg">${STAGES.map((s) => `<button class="chip" type="button" data-stage="${s.k}" aria-pressed="${stageOf(it).k === s.k}" title="${esc(s.d)}">${s.label}</button>`).join("")}</div></div>
     <div class="meta">
       <div class="field"><label for="dType">Type</label><select id="dType">${TYPES.map((t) => `<option${t === it.type ? " selected" : ""}>${t}</option>`).join("")}</select></div>
       <div class="field"><label for="dCat">Catégorie</label><input id="dCat" list="dCats" value="${esc(it.category || "Non classé")}"><datalist id="dCats">${cats.map((c) => `<option value="${esc(c)}">`).join("")}</datalist></div>
@@ -810,22 +857,160 @@ function renderDrawer() {
   const close = () => { S.open = null; renderDrawer(); };
   $("scrim").onclick = close; $("dClose").onclick = close;
   $("dType").onchange = (e) => patch(it.id, { type: e.target.value });
+  $("drawerRoot").querySelectorAll("[data-stage]").forEach((b) => (b.onclick = () => setStage(it.id, b.dataset.stage)));
   $("dCat").onchange = (e) => { const v = e.target.value.trim(); if (v) patch(it.id, { category: clip(v, 40) }); };
   $("dRe").onclick = () => { patch(it.id, { status: "pending" }); analyze(it, null); close(); };
   $("dSyn").onclick = () => { S.studio.scope = "cat::" + (it.category || "Non classé"); S.tab = "studio"; close(); render(); };
   const del = $("dDel"); del.onclick = () => { if (del.dataset.armed) { remove(it.id); close(); } else { del.dataset.armed = 1; del.textContent = "Confirmer la suppression"; } };
   $("dClose").focus();
 }
+/* ---------- Idea life cycle ---------- */
+async function setStage(id, k) {
+  const it = S.items.find((x) => x.id === id); if (!it || stageOf(it).k === k) return;
+  await patch(id, { stage: k, stageAt: Date.now() });
+  toast("« " + clip(it.title, 40) + " » : " + (STAGES.find((s) => s.k === k) || STAGES[0]).label + ".");
+  if (S.open === id) renderDrawer();
+}
+function dailyPick() {
+  const pool = S.items.filter((i) => ["graine", "pousse"].includes(stageOf(i).k) && !i.example).sort((a, b) => (a.id < b.id ? -1 : 1));
+  const list = pool.length ? pool : S.items.filter((i) => ["graine", "pousse"].includes(stageOf(i).k));
+  if (!list.length) return null;
+  const day = new Date().toISOString().slice(0, 10);
+  return list[(hue(day + "herbier") * 7 + S.dayOffset) % list.length];
+}
+function dailyHTML() {
+  const it = dailyPick(); if (!it) return "";
+  const age = Math.max(0, Math.round((Date.now() - it.createdAt) / 864e5));
+  const next = stageOf(it).k === "graine" ? ["pousse", "Faire pousser"] : ["fleur", "Marquer réalisée"];
+  return `<section class="daily" aria-label="Fiche du jour"><span class="eyebrow">Fiche du jour · à redécouvrir</span>
+    <div class="row" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="num mono" style="color:var(--mark);font-weight:600;font-size:12px">N°${numOf(it)}</span>${stageChip(it)}<span class="muted mono" style="font-size:12px">collectée il y a ${age} jour${age > 1 ? "s" : ""}</span></div>
+    <h3>${esc(it.title)}</h3>${it.summary || it.text ? `<p>${esc(clip(it.summary || it.text, 260))}</p>` : ""}
+    ${(it.actions || []).length ? `<p><b>Piste :</b> ${esc(it.actions[0])}</p>` : ""}
+    <div class="cap-row"><button class="btn primary sm" id="dlyNext" type="button">${next[1]}</button><button class="btn sm" id="dlyOpen" type="button">Ouvrir</button>
+      <button class="btn sm" id="dlyAsk" type="button">Comment la développer ?</button><button class="btn sm" id="dlyFade" type="button">Laisser faner</button><button class="btn sm" id="dlyOther" type="button">Une autre</button></div></section>`;
+}
+function wireDaily() {
+  const it = dailyPick(); if (!it || !$("dlyNext")) return;
+  const next = stageOf(it).k === "graine" ? "pousse" : "fleur";
+  $("dlyNext").onclick = () => setStage(it.id, next);
+  $("dlyFade").onclick = () => setStage(it.id, "fanee");
+  $("dlyOpen").onclick = () => { S.open = it.id; renderDrawer(); };
+  $("dlyOther").onclick = () => { S.dayOffset++; render(); };
+  $("dlyAsk").onclick = () => { S.tab = "ask"; render(); askSend(`Comment développer l'idée N°${numOf(it)} « ${it.title} » ? Relie-la aux autres fiches qui peuvent l'enrichir et propose 3 prochaines étapes concrètes.`); };
+}
+function renderCycle(v) {
+  const items = visibleItems();
+  if (!S.items.length) { v.innerHTML = '<div class="empty"><h2>Aucune idée à faire pousser</h2><p>Ajoutez des fiches : elles commencent toutes au stade Graine, puis vous les faites avancer ici.</p></div>'; return; }
+  const cols = STAGES.map((s, i) => {
+    const list = items.filter((it) => stageOf(it).k === s.k); const shown = list.slice(0, 80);
+    return `<section class="col"><div class="col-head"><h3>${s.label}</h3><span class="d">${s.d}</span><span class="n">${list.length}</span></div>
+      ${shown.map((it) => `<div class="mini"><button class="t" type="button" data-open="${it.id}">${esc(clip(it.title, 90))}</button>
+        <div class="row"><span class="num mono" style="color:var(--mark);font-size:11px;font-weight:600">N°${numOf(it)}</span><span class="chip cat" style="--h:${hue(it.category || "Non classé")}">${esc(clip(it.category || "Non classé", 22))}</span>
+        <span class="mv">${i > 0 ? `<button type="button" data-to="${STAGES[i - 1].k}" data-id="${it.id}" aria-label="Revenir à ${STAGES[i - 1].label}" title="${STAGES[i - 1].label}">←</button>` : ""}${i < STAGES.length - 1 ? `<button type="button" data-to="${STAGES[i + 1].k}" data-id="${it.id}" aria-label="Passer à ${STAGES[i + 1].label}" title="${STAGES[i + 1].label}">→</button>` : ""}</span></div></div>`).join("")}
+      ${list.length > shown.length ? `<span class="muted" style="font-size:12px">… et ${list.length - shown.length} autres (filtrez par catégorie)</span>` : ""}
+      ${!list.length ? '<span class="muted" style="font-size:13px">Aucune fiche.</span>' : ""}</section>`;
+  }).join("");
+  const counts = STAGES.map((s) => S.items.filter((i) => stageOf(i).k === s.k).length);
+  const done = counts[2], total = S.items.length;
+  v.innerHTML = `<div style="display:flex;flex-direction:column;gap:14px">
+    <div class="banner">Faites avancer chaque idée avec les flèches. <b class="mono">${done}</b> sur <b class="mono">${total}</b> réalisée(s), <b class="mono">${counts[0]}</b> graine(s) en attente.${visibleItems().length !== total ? " Filtres de la colonne de gauche appliqués." : ""}</div>
+    <div class="board">${cols}</div></div>`;
+  v.querySelectorAll("[data-open]").forEach((b) => (b.onclick = () => { S.open = b.dataset.open; renderDrawer(); }));
+  v.querySelectorAll("[data-to]").forEach((b) => (b.onclick = () => setStage(b.dataset.id, b.dataset.to)));
+}
+
+/* ---------- Ask the herbier ---------- */
+const ASK_SUGGEST = ["Qu'ai-je collecté de plus important ce mois-ci ?", "Quelles idées n'ai-je jamais fait avancer ?", "Quels sujets reviennent le plus souvent ?", "Que me manque-t-il pour passer à l'action sur mes idées en cours ?"];
+function numMap() { const m = new Map(); [...S.items].reverse().forEach((it, i) => m.set(i + 1, it)); return m; }
+function linkRefs(html) {
+  const m = numMap();
+  return html.replace(/N°\s?0*(\d{1,5})/g, (all, n) => { const it = m.get(+n); return it ? `<button class="ref" type="button" data-ref="${it.id}" title="${esc(it.title)}">N°${String(n).padStart(3, "0")}</button>` : all; });
+}
+function ficheBrief(it) { return { num: "N°" + numOf(it), titre: it.title, type: it.type, categorie: it.category || "Non classé", stade: stageOf(it).label, sujets: it.topics || [], date: fmtDate(it.createdAt), resume: clip(it.summary || it.text, 220) }; }
+function askTools() {
+  return [
+    { name: "search_fiches", description: "Recherche plein texte dans toutes les fiches (titre, texte, résumé, texte lu dans les images, sujets, source). Renvoie jusqu'à 15 fiches résumées avec leur numéro.",
+      inputSchema: { type: "object", properties: { query: { type: "string", description: "mots à chercher" }, stade: { type: "string", enum: STAGES.map((s) => s.k) } }, required: ["query"] },
+      execute: (inp) => {
+        const words = String(inp.query || "").toLowerCase().split(/\s+/).filter((w) => w.length > 1);
+        const scored = S.items.filter((it) => !inp.stade || stageOf(it).k === inp.stade).map((it) => {
+          const hay = [it.title, it.text, it.summary, it.extracted, it.category, it.source, ...(it.topics || []), ...(it.keywords || [])].join(" ").toLowerCase();
+          return [words.reduce((n, w) => n + (hay.includes(w) ? 1 : 0), 0), it];
+        }).filter(([n]) => n > 0).sort((a, b) => b[0] - a[0]).slice(0, 15);
+        return scored.length ? scored.map(([, it]) => ficheBrief(it)) : "Aucune fiche ne contient ces mots.";
+      } },
+    { name: "get_fiche", description: "Lit une fiche en entier à partir de son numéro (ex. 12 ou \"N°012\"). Renvoie titre, stade, source, résumé, texte complet, texte lu dans l'image et suggestions.",
+      inputSchema: { type: "object", properties: { num: { type: "string" } }, required: ["num"] },
+      execute: (inp) => {
+        const it = numMap().get(parseInt(String(inp.num).replace(/\D/g, ""), 10)); if (!it) throw new Error("Fiche introuvable");
+        return { ...ficheBrief(it), source: [it.source, it.url].filter(Boolean).join(" · "), texte: clip(it.text, 6000), image: clip(it.extracted, 2000), suggestions: it.actions || [] };
+      } }
+  ];
+}
+async function askSend(q) {
+  const A = S.ask; q = String(q || "").trim(); if (!q || A.running) return;
+  if (!S.sample) { toast("Cette fonction demande l'accès à Claude."); return; }
+  if (!S.items.length) { toast("Ajoutez d'abord quelques fiches."); return; }
+  A.turns.push({ role: "user", content: q }); A.draft = ""; A.live = ""; A.running = true; A.ctl = new AbortController(); A.note = ""; render();
+  let budget = 70000; const idx = [];
+  for (const it of S.items) { const l = `N°${numOf(it)} | ${stageOf(it).label} | ${it.type} | ${it.category || "Non classé"} | ${fmtDate(it.createdAt)} | ${it.title} | ${(it.topics || []).join(", ")} | ${clip(it.summary || it.text, 160).replace(/\s+/g, " ")}`; if ((budget -= l.length) < 0) break; idx.push(l); }
+  const rules = `Tu es l'assistant de l'« Herbier d'idées », la base personnelle de notes, idées, articles et images de la personne qui te parle.
+Réponds en français, en t'appuyant d'abord sur ses fiches. Cite chaque fiche utilisée par son numéro au format N°012. Si l'herbier ne contient pas la réponse, dis-le clairement, puis donne ton avis en le signalant comme tel et suggère quoi collecter.
+Stades des idées : Graine (idée brute), Pousse (en réflexion), Fleur (réalisée), Fanée (abandonnée).
+${S.canTools ? "Outils : search_fiches pour chercher dans le texte complet, get_fiche pour lire une fiche en entier avant d'en citer des détails." : ""}
+Style : Markdown simple, concis, utile, sans préambule.
+
+INDEX DES FICHES (${idx.length}${idx.length < S.items.length ? " sur " + S.items.length + ", les plus récentes" : ""}) — numéro | stade | type | catégorie | date | titre | sujets | résumé
+${idx.join("\n")}`;
+  const turns = A.turns.slice(-10); while (turns.length && turns[0].role !== "user") turns.shift();
+  try {
+    const r = await S.sample([{ role: "user", content: rules }, ...turns], { cache: false, signal: A.ctl.signal, modelTier: "default", ...(S.canTools ? { tools: askTools() } : {}),
+      onText: ({ text }) => { A.live = text; const el = $("askLive"); if (el) { el.innerHTML = linkRefs(md(text)); wireRefs(el); } } });
+    A.turns.push({ role: "assistant", content: r.text }); if (r.truncated) A.note = "Réponse coupée : posez une question plus ciblée.";
+  } catch (e) {
+    if (e.text) A.turns.push({ role: "assistant", content: e.text + "\n\n*(réponse interrompue)*" });
+    const m = sampleErr(e); if (m) A.note = m;
+    if (e.code === "tools_unavailable") S.canTools = false;
+  }
+  A.running = false; A.live = ""; render();
+}
+function wireRefs(root) { root.querySelectorAll("[data-ref]").forEach((b) => (b.onclick = () => { S.open = b.dataset.ref; renderDrawer(); })); }
+function renderAsk(v) {
+  const A = S.ask;
+  const msgs = A.turns.map((t) => t.role === "user" ? `<div class="msg user">${esc(t.content)}</div>` : `<div class="msg bot prose">${linkRefs(md(t.content))}</div>`).join("");
+  v.innerHTML = `<div style="display:flex;flex-direction:column;gap:14px">
+    ${!A.turns.length ? `<div class="empty"><h2>Demander à l'herbier</h2><p>Posez une question sur ce que vous avez collecté. Claude cherche dans vos fiches, répond en citant leurs numéros, et chaque numéro ouvre la fiche.</p>
+      <div class="cloud">${ASK_SUGGEST.map((s, i) => `<button class="chip" type="button" data-sug="${i}">${esc(s)}</button>`).join("")}</div></div>` : ""}
+    <div class="chat">${msgs}${A.running ? `<div class="msg bot prose" id="askLive">${A.live ? linkRefs(md(A.live)) : '<span class="state" style="margin:0"><span class="pulse"></span>Claude cherche dans vos fiches…</span>'}</div>` : ""}</div>
+    ${A.note ? `<div class="banner">${esc(A.note)}</div>` : ""}
+    <div class="ask-box"><textarea id="askQ" placeholder="${S.sample ? "Votre question… (Entrée pour envoyer, Maj + Entrée pour aller à la ligne)" : "Disponible lorsque cette page peut utiliser Claude."}"${S.sample ? "" : " disabled"}>${esc(A.draft)}</textarea>
+      <div class="cap-row">${A.running ? '<button class="btn" id="askStop" type="button">Arrêter</button>' : `<button class="btn primary" id="askGo" type="button"${S.sample ? "" : " disabled"}>Envoyer</button>`}
+        ${A.turns.length && !A.running ? '<button class="btn" id="askClear" type="button">Nouvelle conversation</button><button class="btn" id="askSave" type="button">Enregistrer la dernière réponse</button>' : ""}</div></div></div>`;
+  wireRefs(v);
+  v.querySelectorAll("[data-sug]").forEach((b) => (b.onclick = () => askSend(ASK_SUGGEST[+b.dataset.sug])));
+  const q = $("askQ"); q.oninput = () => (A.draft = q.value);
+  q.onkeydown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); askSend(q.value); } };
+  const on = (id, fn) => { const el = $(id); if (el) el.onclick = fn; };
+  on("askGo", () => askSend(q.value)); on("askStop", () => A.ctl?.abort());
+  on("askClear", () => { A.turns = []; A.note = ""; render(); });
+  on("askSave", async () => { const last = [...A.turns].reverse().find((t) => t.role === "assistant"); const qq = [...A.turns].reverse().find((t) => t.role === "user");
+    if (last) { await put({ id: "s-" + rid(), kind: "synth", mode: "question", modeLabel: "Question", scope: clip(qq ? qq.content : "", 80), content: last.content, createdAt: Date.now() }); toast("Réponse enregistrée dans Synthèses."); } });
+}
+
 function render() {
   renderRail();
-  $("tabSheets").setAttribute("aria-selected", S.tab === "sheets"); $("tabStudio").setAttribute("aria-selected", S.tab === "studio");
+  for (const [id, t] of [["tabSheets", "sheets"], ["tabCycle", "cycle"], ["tabAsk", "ask"], ["tabStudio", "studio"]]) $(id).setAttribute("aria-selected", S.tab === t);
   const nq = S.items.filter((i) => i.status === "queued").length; const rq = $("runQueue");
   rq.hidden = !S.sample || (!nq && !S.batch.running);
   rq.textContent = S.batch.running ? "Arrêter l'analyse" : "Analyser " + nq + " fiche(s) en attente";
   const b = $("banner");
   if (S.batch.note) { b.hidden = false; b.textContent = S.batch.note; }
   else if (S.loadNote && S.loaded && S.col) { b.hidden = false; b.textContent = S.loadNote; } else if (S.local && !S.items.length && S.loaded) { b.hidden = false; b.innerHTML = "<b>Mode local.</b> Ouvrez cette page connecté à claude.ai pour enregistrer vos fiches dans votre espace privé."; } else b.hidden = true;
-  const v = $("view"); if (S.tab === "sheets") renderSheets(v); else renderStudio(v);
+  const v = $("view");
+  if (S.tab === "ask") {
+    const q = $("askQ"); const focused = q && document.activeElement === q; const pos = focused ? q.selectionStart : 0;
+    renderAsk(v); if (focused) { const n = $("askQ"); n.focus(); n.setSelectionRange(pos, pos); }
+  } else if (S.tab === "cycle") renderCycle(v); else if (S.tab === "sheets") renderSheets(v); else renderStudio(v);
   if (S.open) { const it = S.items.find((x) => x.id === S.open); if (!it) { S.open = null; renderDrawer(); } }
 }
 
@@ -848,6 +1033,8 @@ cap.addEventListener("dragleave", () => cap.classList.remove("drag"));
 cap.addEventListener("drop", (e) => { e.preventDefault(); cap.classList.remove("drag"); const f = e.dataTransfer.files; if (f && f.length) acceptFiles(f); else { const t = e.dataTransfer.getData("text/plain"); if (t) $("capText").value += t; } });
 $("tabSheets").onclick = () => { S.tab = "sheets"; render(); };
 $("tabStudio").onclick = () => { S.tab = "studio"; render(); };
+$("tabCycle").onclick = () => { S.tab = "cycle"; render(); };
+$("tabAsk").onclick = () => { S.tab = "ask"; render(); const q = $("askQ"); if (q && !q.disabled) q.focus(); };
 let qT; $("search").oninput = (e) => { clearTimeout(qT); qT = setTimeout(() => { S.filter.q = e.target.value; S.tab = "sheets"; render(); }, 150); };
 $("reorg").onclick = proposeReorg;
 $("exportAll").onclick = exportAll;
@@ -860,7 +1047,7 @@ render();
   const use = (n) => (window.claude && window.claude.use ? window.claude.use(n).catch(() => null) : Promise.resolve(null));
   const [db, user, sample, downloads, mcp] = await Promise.all([use("db"), use("user"), use("sample"), use("downloads"), use("mcp")]);
   S.sample = sample; S.downloads = downloads; S.mcp = mcp; if (S.conn && S.conn.open) renderConn();
-  if (sample) { try { const lim = await sample.limits(); S.canImg = !!lim.images; } catch { S.canImg = false; } }
+  if (sample) { try { const lim = await sample.limits(); S.canImg = !!lim.images; S.canTools = !!lim.tools; } catch { S.canImg = false; S.canTools = false; } }
   let uid = null; if (user) { try { uid = await user.id(); } catch {} }
   if (!db || !uid) return goLocal();
   S.col = db.collection("data/users/" + uid);

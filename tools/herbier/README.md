@@ -11,6 +11,9 @@ Outil de collecte et d'organisation de notes, idées, articles, citations, tâch
 - **Organisation** : regroupement par catégorie, filtres par type et sujet, recherche plein texte, édition manuelle.
 - **Réorganiser les catégories** : Claude relit toutes les fiches et propose une taxonomie ; rien n'est appliqué sans validation.
 - **Synthèses & suggestions** : synthèse, pistes et idées, plan d'action, connexions entre fiches, brief d'une page — sur tout l'herbier, une catégorie, un type ou un sujet. Enregistrables et exportables en Markdown.
+- **Demander à l'herbier** : questions en langage naturel ; Claude cherche dans les fiches (recherche plein texte et lecture complète), répond en citant les numéros (N°012 ouvre la fiche) ; réponse enregistrable dans Synthèses.
+- **Cycle des idées** : chaque fiche a un stade (Graine, Pousse, Fleur, Fanée) ; tableau en colonnes avec flèches pour faire avancer les idées ; stade modifiable dans la fiche ; périmètre « Stade » dans les synthèses.
+- **Fiche du jour** : une graine ou une pousse ressort chaque jour en tête des fiches (faire pousser, laisser faner, demander comment la développer, en voir une autre).
 - **Export** complet en Markdown.
 
 ## Stockage
